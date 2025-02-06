@@ -1,0 +1,77 @@
+```{r}
+library(liver)
+library(ggplot2)
+data(bank)
+
+set.seed(2138)
+n <- dim(bank)[1]
+indices <- seq(1:n)
+indices_total <- sample(indices,size=1000,replace=FALSE)
+bank_1000 <- bank[indices_total, ]
+```
+
+c)  ¿Qué tipo de variables aparecen en la base de datos?
+
+```{r}
+v_disc <- names(bank_1000)[sapply(bank_1000, is.factor)] 
+v_cont <- names(bank_1000)[sapply(bank_1000, is.numeric)]
+```
+
+I)  ¿Qué variables son discretas?
+
+```{r}
+cat("Variables discretas:",v_disc)
+
+```
+
+II) ¿Cuáles son continuas?
+
+```{r}
+cat("Variables continuas:",v_cont)
+```
+
+III) ¿Qué categorías tienen las variables?
+
+```{r}
+for (i in v_disc) {
+  cat("Categorías de", i, ":\n")
+  cat(levels(bank_1000[[i]]))
+}
+
+```
+
+IV) ¿Hay variables tipo texto? No hay ninguna variable de tipo texto.
+
+```{r}
+v_char <- names(bank_1000)[sapply(bank_1000, is.character)]
+if (length(v_char) > 0){
+  cat("Variables de tipo texto:", v_char)
+} else {
+  cat("No hay variables de tipo texto")
+}
+```
+
+
+d)
+```{r}
+library(liver)
+data(bank)
+
+# Variables con valores constantes (todos los valores son iguales)
+constantes <- sapply(bank, function(x) length(unique(x)) == 1)
+vars_constantes <- names(bank)[constantes]
+
+cat("Variables constantes (todos los valores son iguales):", vars_constantes, "\n")
+
+# Variables con muchos valores faltantes (aquí consideramos más del 50% como criterio)
+umbral_na <- 0.3  # Cambia este umbral según tus necesidades
+faltantes <- sapply(bank, function(x) mean(is.na(x)) > umbral_na)
+vars_faltantes <- names(bank)[faltantes]
+
+cat("Variables con muchos valores faltantes (más del 50%):", vars_faltantes, "\n")
+
+# Unir las variables irrelevantes detectadas
+vars_irrelevantes <- unique(c(vars_constantes, vars_faltantes))
+
+cat("Variables irrelevantes identificadas:", vars_irrelevantes, "\n")
+```
