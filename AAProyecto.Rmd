@@ -1,0 +1,72 @@
+---
+title: "AAProyecto"
+author: "Marc Gil Arnau"
+date: "2025-02-04"
+output: html_document
+---
+Cargamos los datos
+
+```{r}
+library(readr)
+healthcare_dataset_stroke_data <- read_csv("/home/alumnos/marc/DataScience/archive/healthcare-dataset-stroke-data.csv")
+stroke_data <- healthcare_dataset_stroke_data
+#View(stroke_data)
+dim(stroke_data)
+```
+
+
+Vamos a hacer una partición en train-test-validation.
+Fiajamos la semilla porque hay aleatoriedad.
+```{r}
+library(caret)
+set.seed(10)
+```
+###Carmen
+
+Nos quedamos el 60% para train.
+```{r}
+train_index <- createDataPartition(stroke_data$stroke, times = 1, p= 0.6, list = FALSE) #Índices para train (60%) 
+#Me daba error si la lista está en true
+
+datos_train <- stroke_data[train_index,] #Datos de train
+dim(datos_train)
+```
+
+Me queda un 40% para test y validation
+```{r}
+datos_test_val <- stroke_data[-train_index,] #Cogemos los índices restantes
+dim(datos_test_val)
+
+val_index <- createDataPartition(datos_test_val$stroke, times = 1, p= 0.5, list = TRUE)$Resample1 #Partimos los indices en dos partes iguales
+#Si la lista está en true da error si no está stroke, también si esta en false aunque este stroke
+
+datos_val <- datos_test_val[val_index,] #Datos de validación
+datos_test <-  datos_test_val[-val_index,] #Datos de test
+dim(datos_val)
+dim(datos_test)
+```
+
+
+
+###Libro
+Creamos indices
+```{r}
+ntotal <- dim(stroke_data)[1] # Guardamos el numero de filas
+indices <- 1:ntotal #Vector con los idices de las filas
+ntrain <- ntotal * .6 #Queremos el 60% de las observaciones para train
+indices_train <- sample(indices, ntrain, replace = FALSE) #Seleccionamos aleatoriamente los indices para train
+
+indices_restantes <-  indices[-indices.train] #Los restantes seran para test y validation
+ntest <- length(indices_restantes) * .5 #De los restantes, 50% son para test y 50% para validation
+indices_test <- sample(indices_restantes, ntest, replace = FALSE) #Seleccionamos aleatoriamente los indices para test dentro de los que no hemos usado
+indices_val <- indices_restantes[-indices_test] #Los restantrs son para validation
+
+train <-  stroke_data[indices_train,] #60% de los datos para train
+test <- stroke_data[indices_test,] #20% de los datos para test
+val <- stroke_data[indices_val,] #20% de los datos para validation
+
+dim(train)
+dim(test)
+dim(val)
+```
+```{r}
