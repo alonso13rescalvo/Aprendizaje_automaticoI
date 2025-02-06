@@ -1,0 +1,606 @@
+---
+title: "Práctica 1: Students Performance"
+author: |
+  Alonso Rescalvo Casas  
+  Lorenzo Montilla Fernández
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output: 
+  pdf_document:
+    toc: true             
+    toc_depth: 2         
+    number_sections: true 
+    latex_engine: xelatex 
+mainfont: "TeX Gyre Termes"
+fontsize: 11pt
+geometry: margin=1in
+header-includes:
+  - \usepackage{setspace}       
+  - \onehalfspacing              
+  - \usepackage{float}           
+  - \usepackage{graphicx}        
+  - \usepackage{titlesec}        
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Importamos la librería:
+
+```{r}
+datos=read.csv("https://raw.githubusercontent.com/srpayd/R-Analysis/refs/heads/master/StudentsPerformance.csv")
+```
+
+Bibliotecas:
+
+```{r message=FALSE}
+library(ggplot2)
+library(reshape2)
+library(viridis)
+```
+
+# EDA
+
+## Tamaño de la base de datos
+
+```{r}
+dim(datos)
+```
+
+En el conjunto de datos hay **1000** observaciones y **8** variables.
+
+## Tipos de variables
+
+```{r} 
+str(datos)
+```
+
+Tenemos **5** variables discretas: \texttt{gender}, \texttt{race.ethnicity}, \texttt{parental.level.of.education}, \texttt{lunch} y \texttt{test.preparation.course}.
+
+Hay **3** variables continuas: \texttt{math.score}, \texttt{reading.score} y \texttt{writing.score}.
+
+### gender
+
+```{r}
+unique(datos$gender)
+```
+
+\texttt{gender} tiene dos categorías: _female_ y _male_.
+
+### race.ethnicity 
+
+```{r}
+unique(datos$race.ethnicity)
+```
+
+\texttt{race.ethnicity} tiene cinco categorías: _group A_, _group B_, _group C_, _group D_ y _group E_.
+
+### parental.level.of.education
+
+```{r}
+unique(datos$parental.level.of.education)
+```
+
+\texttt{parental.level.of.education} tiene seis categorías: _bachelor's degree_, _some college_, _master's degree_, _associate's degree_, _high school_ y _some high school_.
+
+### lunch
+
+```{r}
+unique(datos$lunch)
+```
+
+\texttt{lunch} tiene dos categorías: _standard_ y _free/reduced_.
+
+### test.preparation.course
+
+```{r}
+unique(datos$test.preparation.course)
+```
+
+\texttt{test.preparation.course} tiene dos categorías: _none_ y _completed_.
+
+Las cinco variables discretas son de tipo texto. 
+
+## ¿Variables irrelevantes?
+
+```{r}
+# 1. Seleccionar solo las columnas numéricas
+datos_numericos <- datos[sapply(datos, is.numeric)]
+
+# 2. Calcular la matriz de correlación para las variables numéricas
+cor_matrix <- cor(datos_numericos)
+cor_data <- melt(cor_matrix)
+
+# 4. Crear el heatmap con los números de correlación
+ggplot(data = cor_data, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  geom_text(aes(label = round(value, 2)), color = "black", size = 4) +  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name="Correlación") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1)) +
+  coord_fixed() +
+  labs(title = "Heatmap de Correlaciones",
+       x = "Variables", y = "Variables")
+
+```
+
+El heatmap de correlaciones entre las 3 variables continuas del dataset revela una alta correlación positiva entre estas variables (mayor o igual a **0.8**). Esto sugiere que podrían estar aportando información redundante al modelo, y que tal vez sea útil considerar solo una de ellas para simplificar el modelo sin perder precisión.
+
+# Calculos estadísticos
+
+## gender
+
+```{r}
+table(datos$gender)
+```
+
+Vemos que hay algo más de mujeres que de hombres pero sin que haya una gran diferencia.
+
+Veamos ahora la frecuencia de cada clase:
+
+```{r}
+prop.table(table(datos$gender))
+```
+
+## race.ethnicity
+
+```{r}
+table(datos$race.ethnicity)
+```
+
+El grupo más numeroso es el _group C_ seguido del _group D_ y el que menos tiene es el _group A_ que tiene bastantes menos que el resto.
+
+La tabla de frecuencias es la siguiente:
+
+```{r}
+prop.table(table(datos$race.ethnicity))
+```
+
+## parental.level.of.education
+
+```{r}
+table(datos$parental.level.of.education)
+```
+
+La educacion de los padres son mayoritariamente _associate's degree_, _high school_, _some college_ o _some high school_ de forma muy similar entre estas, sin embargo hay menos que tengan _bachelor's degree_ y bastantes pocos que tengan un _master's degree_.
+
+Esta es la tabla de frecuencias:
+
+```{r}
+prop.table(table(datos$parental.level.of.education))
+```
+
+## lunch
+
+```{r}
+table(datos$lunch)
+```
+
+Hay casi el doble de estudiantes que reciben un almuerzo _standard_ respecto a los que toman uno _free/reduced_.
+
+Su tabla de frecuencias es:
+
+```{r}
+prop.table(table(datos$lunch))
+```
+
+## test.preparation.course
+
+```{r}
+table(datos$test.preparation.course)
+```
+
+Casi 2/3 de los estudiantes no han realizado el test de preparación.
+
+La tabla de frecuencia es la siguiente:
+
+```{r}
+prop.table(table(datos$test.preparation.course))
+```
+
+## math.score
+
+```{r}
+summary(datos$math.score)
+```
+```{r}
+sd(datos$math.score, na.rm = TRUE)
+```
+
+\texttt{math.score} tiene una media y mediana cercanas, lo que indica una distribución aproximadamente simétrica. La desviación estándar (**15.16**) muestra una dispersión moderada alrededor de la media, con una amplitud amplia en los puntajes, desde el mínimo hasta el máximo posible (**0 a 100**). Esto sugiere una variabilidad significativa en el rendimiento en matemáticas entre los estudiantes.
+
+## reading.score
+
+```{r}
+summary(datos$reading.score)
+```
+```{r}
+sd(datos$reading.score, na.rm = TRUE)
+```
+
+Para \texttt{reading.score}, la media y mediana también son cercanas, lo cual indica simetría en la distribución de los puntajes de lectura. La desviación estándar (**14.60**) es ligeramente menor que en matemáticas, lo que sugiere una dispersión algo más concentrada. Al igual que en matemáticas, los puntajes de lectura cubren un amplio rango, lo cual refleja diferencias notables en el rendimiento de lectura.
+
+## writing.score
+
+```{r}
+summary(datos$writing.score)
+```
+```{r}
+sd(datos$writing.score, na.rm = TRUE)
+```
+
+En \texttt{writing.score}, los puntajes siguen un patrón similar, con una media y mediana próximas, señal de simetría en la distribución. La desviación estándar (**15.20**) es comparable a la de matemáticas, indicando una variabilidad en escritura similar a la observada en los puntajes de matemáticas. Los puntajes de escritura también varían considerablemente, abarcando desde valores bajos (**10**) hasta el máximo (**100**), lo cual evidencia diversidad en las habilidades de escritura entre los estudiantes.
+
+# Técnicas gráficas (variables discretas)
+
+```{r, warning=FALSE}
+# Crear gráfico de barras estético con ajustes para evitar que los números se salgan
+ggplot(datos, aes(x = gender, fill = gender)) +
+  geom_bar(width = 0.6, color = "white") +  
+  scale_fill_manual(values = c("deepskyblue3", "lightcoral")) +  
+  labs(title = "Distribución de Género", 
+       x = "Género", 
+       y = "Cantidad", 
+       fill = "Género") + 
+  theme_minimal(base_size = 15) +  
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  
+    axis.text = element_text(size = 12),  
+    axis.title = element_text(face = "bold"),  
+    legend.position = "none"  
+  ) +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.2, size = 5,
+            color = "black") +  
+  expand_limits(y = max(table(datos$gender)) * 1.1)  
+```
+
+La gráfica muestra la distribución de género en la muestra. Se observa que hay una ligera mayor proporción de estudiantes de género femenino (**51.8%**) comparado con masculino (**48.2%**). Esta diferencia no es muy marcada, lo que sugiere una muestra relativamente balanceada en términos de género.
+
+```{r}
+ggplot(datos, aes(x = race.ethnicity, fill = race.ethnicity)) +
+  geom_bar(width = 0.6, color = "white") +  
+  scale_fill_brewer(palette = "Set3") +  
+  labs(title = "Distribución por Raza/Etnicidad", 
+       x = "Grupo Racial/Etnicidad", 
+       y = "Frecuencia") +  
+  theme_minimal(base_size = 15) +  
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  
+    axis.text.x = element_text(angle = 45, hjust = 1),  
+    axis.text = element_text(size = 12),  
+    axis.title = element_text(face = "bold"),  
+    legend.position = "none"  
+  ) +
+  geom_text(stat = "count", aes(label = ..count..), vjust = -0.5, size = 5,
+            color = "black") +  
+  expand_limits(y = max(table(datos$race.ethnicity)) * 1.1)
+```
+
+El gráfico de barras indica la distribución de estudiantes por grupo racial/étnico. El grupo C es el más numeroso (**319**), seguido por el grupo D (**262**), mientras que el grupo A es el menos representado (**89**). Esto puede influir en los análisis posteriores, ya que los grupos con menos representatividad pueden tener mayor variabilidad en los resultados.
+
+# Técnicas gráficas (variables continuas)
+
+```{r}
+# Histograma para la variable 'math.score'
+ggplot(datos, aes(x = math.score)) +
+  geom_histogram(binwidth = 5, fill = "dodgerblue3", color = "white", alpha = 0.8) +  
+  labs(title = "Distribución de Puntuaciones en Matemáticas", 
+       x = "Puntuación en Matemáticas", 
+       y = "Frecuencia") +  
+  theme_minimal(base_size = 15) +  
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),  
+    axis.title = element_text(face = "bold"))
+```
+
+El histograma de \texttt{math.score} se asemeja a una distribucion normal ligeramente asimétrica hacia la izquierda con la mayoría de las puntuaciones concentradas entre **50** y **80**. Hay algunos valores extremos en ambos lados, indicando que aunque la mayoría de los estudiantes tienen puntuaciones alrededor de la media, algunos pocos tienen puntuaciones muy bajas o muy altas.
+
+# Estimador de máxima verosimilitud
+
+El \textit{Estimador de Máxima Verosimilitud} (MLE) se basa en maximizar la \textit{función de verosimilitud}, que mide la probabilidad de observar los datos dado un conjunto de parámetros.
+
+Para una variable \( X \) que sigue una distribución normal \( \mathcal{N}(\mu, \sigma^2) \), la función de densidad de probabilidad es:
+
+\[
+f(x; \mu, \sigma^2) = \frac{1}{\sqrt{2\pi \sigma^2}} \exp\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)
+\]
+
+Dado un conjunto de observaciones \(x_1, x_2, \ldots, x_n\), la función de verosimilitud es:
+
+\[
+L(\mu, \sigma^2 \mid x_1, \dots, x_n) = \prod_{i=1}^{n} f(x_i; \mu, \sigma^2)
+\]
+
+Trabajamos con el \textit{logaritmo de la verosimilitud} para simplificar los cálculos:
+
+\[
+\log L(\mu, \sigma^2 \mid x_1, \dots, x_n) = -\frac{n}{2} \log(2\pi \sigma^2) - \frac{1}{2\sigma^2} \sum_{i=1}^{n} (x_i - \mu)^2
+\]
+
+Para estimar el parámetro \( \mu \), derivamos la log-verosimilitud respecto a \( \mu \) e igualamos a 0:
+
+\[
+\frac{\partial \log L}{\partial \mu} = \frac{1}{\sigma^2} \sum_{i=1}^{n} (x_i - \mu) = 0
+\]
+
+Esto nos lleva al estimador de máxima verosimilitud para \( \mu \):
+
+\[
+\hat{\mu}_{MLE} = \frac{1}{n} \sum_{i=1}^{n} x_i
+\]
+
+Para estimar \( \sigma^2 \), derivamos respecto a \( \sigma^2 \) e igualamos a 0:
+
+\[
+\hat{\sigma}^2_{MLE} = \frac{1}{n} \sum_{i=1}^{n} (x_i - \hat{\mu}_{MLE})^2
+\]
+
+Por lo tanto, el estimador de la desviación estándar es:
+
+\[
+\hat{\sigma}_{MLE} = \sqrt{\hat{\sigma}^2_{MLE}}
+\]
+
+```{r warning=FALSE}
+# Visualización con densidad muestral y teórica superpuestas
+mu_mle <- mean(datos$math.score)
+sigma2_mle <- sum((datos$math.score - mu_mle)^2) / length(datos$math.score)  # Varianza MLE
+sigma_mle <- sqrt(sigma2_mle)  # Desviación estándar MLE
+ggplot(datos, aes(x = math.score)) +
+  geom_histogram(aes(y = ..density..), binwidth = 5, fill = "dodgerblue3",
+                 color = "white", alpha = 0.6) +
+  geom_density(color = "blue", size = 1.2) +  # Densidad muestral
+  stat_function(fun = dnorm, args = list(mean = mu_mle, sd = sigma_mle), 
+                color = "red", size = 1.5) +  # Distribución teórica
+  labs(title = "Comparación Distribución Muestral y Teórica (MLE)",
+       x = "Puntuación en Matemáticas", 
+       y = "Densidad") +
+  theme_minimal(base_size = 15)
+
+```
+
+La superposición entre la distribución muestral y la teórica (calculada con el Estimador de Máxima Verosimilitud) muestra un buen ajuste a una distribución normal. Las discrepancias entre ambas curvas son pequeñas, lo que sugiere que el estimador de media y varianza obtenido es adecuado para describir la muestra.
+
+# Método de los momentos
+
+El \textit{Método de los Momentos} utiliza los momentos muestrales para estimar los parámetros de una distribución.
+
+Para una variable normal \( X \sim \mathcal{N}(\mu, \sigma^2) \), el primer momento teórico (media poblacional) es:
+
+\[
+\mu = \mathbb{E}[X] 
+\]
+
+El segundo momento teórico es:
+
+\[
+\mu_2 = \mathbb{E}[X^2]
+\]
+
+El \textbf{primer momento muestral} es simplemente la media muestral:
+
+\[
+\hat{\mu} = \frac{1}{n} \sum_{i=1}^{n} x_i
+\]
+
+El \textbf{segundo momento muestral} es el promedio de los cuadrados de las observaciones:
+
+\[
+\hat{\mu}_2 = \frac{1}{n} \sum_{i=1}^{n} x_i^2
+\]
+
+Igualando los momentos teóricos y muestrales, podemos despejar el estimador de la varianza:
+
+\[
+\hat{\sigma}^2= \frac{1}{n} \sum_{i=1}^{n} x_i^2 - \hat{\mu}^2
+\]
+
+\subsection{Intervalo de confianza}
+
+Para el parámetro \( \mu \), el intervalo de confianza se puede calcular usando:
+
+\[
+IC_{\mu} = \left( \hat{\mu} - z_{\alpha/2} \cdot \frac{\hat{\sigma}}{\sqrt{n}}, \hat{\mu} + z_{\alpha/2} \cdot \frac{\hat{\sigma}}{\sqrt{n}} \right)
+\]
+
+Para el parámetro \( \sigma^2 \), usamos la distribución \(\chi^2\) para calcular el intervalo de confianza:
+
+\[
+IC_{\sigma^2} = \left( \frac{(n - 1) \hat{\sigma}^2}{\chi^2_{1-\alpha/2, n-1}}, \frac{(n - 1) \hat{\sigma}^2}{\chi^2_{\alpha/2, n-1}} \right)
+\]
+
+```{r}
+# Parámetros de configuración
+alpha <- 0.05  # Nivel de significancia
+n <- length(datos$math.score)  # Tamaño de la muestra
+
+# 1. Calcular los estimadores del método de los momentos
+mu_mm <- mean(datos$math.score)  # Primer momento (media muestral)
+second_moment_muestral <- mean(datos$math.score^2)  # Segundo momento muestral
+sigma2_mm <- second_moment_muestral - mu_mm^2  # Varianza muestral (método de los momentos)
+sigma_mm <- sqrt(sigma2_mm)  # Desviación estándar
+
+# Error estándar de la media
+error_est_mu <- sigma_mm / sqrt(n)
+
+# Intervalo de confianza para la media
+IC_mu_inf <- mu_mm - qnorm(1 - alpha/2) * error_est_mu 
+IC_mu_sup <- mu_mm + qnorm(1 - alpha/2) * error_est_mu
+
+# Cálculo del intervalo de confianza para la varianza 
+IC_sigma2_inf <- (n - 1) * sigma2_mm / qchisq(1 - alpha/2, df = n - 1)
+IC_sigma2_sup <- (n - 1) * sigma2_mm / qchisq(alpha/2, df = n - 1)
+
+# Imprimir el valor del estimador y el intervalo de confianza para la varianza
+print(paste("Valor del estimador (media muestral) = ", round(mu_mm, 3)))
+print(paste("Intervalo de confianza para la varianza = [", 
+            round(IC_sigma2_inf, 3), ",", round(IC_sigma2_sup, 3), "]"))
+
+# 2. Comparar la distribución muestral con la distribución teórica
+# Histograma de la muestra con la densidad teórica ajustada por el método de los momentos
+# Gráfico con la densidad muestral y la densidad teórica
+ggplot(data.frame(datos$math.score), aes(x = datos$math.score)) +
+  # Histograma de la muestra
+  geom_histogram(aes(y = ..density..), binwidth = 5, fill = "skyblue", color = "white", alpha = 0.6) +
+  # Añadir curva de densidad muestral (calculada a partir de los datos)
+  geom_density(color = "blue", size = 1.2) +
+  # Añadir curva de densidad teórica (Método de los Momentos)
+  stat_function(fun = dnorm, args = list(mean = mu_mm, sd = sigma_mm),
+                color = "darkgreen", size = 1.5) +
+  labs(title = "Comparación Distribución Muestral y Teórica (Método de los Momentos)",
+       x = "Puntuación", y = "Densidad") +
+  theme_minimal()
+```
+
+La superposición entre la distribución muestral y la teórica muestran un buen ajuste a una distribución normal. El gráfico resultante de aplicar el Método de los Momentos es similar al obtenido con el MLE, lo cual es esperado ya que ambos métodos buscan ajustar la media y la varianza de la distribución a la muestra observada.
+
+# Probabilidad de que el verdadero valor de la variable sea superior a un valor fijo.
+
+## Cálculo teórico 
+
+```{r results='asis'}
+# Parámetros de la distribución
+mu <-  mean(datos$math.score)      # Media
+sigma <- sd(datos$math.score)    # Desviación estándar
+x0 <- 70       # Valor fijo
+
+# Calcular la probabilidad teórica
+prob_teorica <- 1 - pnorm(x0, mean = mu, sd = sigma)
+cat("La probabilidad teórica de que math.score sea mayor que", x0, "es:",
+    prob_teorica, "\n")
+```
+
+## Cálculo práctico
+
+```{r results='asis'}
+# Número de simulaciones
+n_simulaciones <- 100000
+
+# Generar valores simulados a partir de la distribución normal
+valores_simulados <- rnorm(n_simulaciones, mean = mu, sd = sigma)
+
+# Calcular la proporción de valores mayores a x0
+prob_simulada <- mean(valores_simulados > x0)
+cat("La probabilidad simulada de que math.score sea mayor que", x0, "es:",
+    prob_simulada, "\n")
+```
+
+Vemos que los resultados del cálculo teórico y práctico son muy similares ya que cuando tenemos un conjunto de datos con un número considerable de observaciones al realizar simulaciones los resultados obtenidos son muy parecidos a los teóricos.
+
+# Comparación de distribuciones de variables continuas con discretas
+
+```{r}
+# Violin plot para comparar la distribución de math.score por género
+ggplot(datos, aes(x = gender, y = math.score, fill = gender)) +
+  geom_violin(trim = FALSE) +  
+  geom_boxplot(width = 0.1, color = "black", alpha = 0.5) +  # Agrega boxplot
+  labs(title = "Distribución de math.score por género",
+       x = "Género",
+       y = "Puntuación en matemáticas (math.score)") +
+  theme_minimal()
+```
+
+El violin plot muestra la distribución de \texttt{math.score} para los géneros masculino y femenino. La forma del violin plot sugiere que la distribución es similar para ambos géneros, con una ligera mayor concentración de puntuaciones alrededor de la mediana en las mujeres. Esto visualmente sugiere que las diferencias entre géneros podrían no ser muy grandes.
+
+# Contraste de hipótesis
+
+Dado el conjunto de datos de rendimiento estudiantil, realizamos un contraste de hipótesis para verificar si existe una diferencia significativa en el rendimiento en matemáticas entre dos grupos de estudiantes: aquellos que reciben un almuerzo \textit{standard} y los que reciben un almuerzo \textit{free/reduced}.
+
+\subsection{Hipótesis}
+
+\begin{itemize}
+    \item \textbf{Hipótesis nula} (\(H_0\)): No hay diferencia en el rendimiento en matemáticas entre estudiantes con almuerzo \textit{standard} y \textit{free/reduced}, es decir, las medias de los \texttt{math.score} son iguales en ambos grupos.
+    \[
+    H_0: \mu_{\text{standard}} = \mu_{\text{free/reduced}}
+    \]
+    
+    \item \textbf{Hipótesis alternativa} (\(H_1\)): Existe una diferencia en el rendimiento en matemáticas entre estudiantes con almuerzo \textit{standard} y \textit{free/reduced}, es decir, las medias de los \texttt{math.score} no son iguales en ambos grupos.
+    \[
+    H_1: \mu_{\text{standard}} \neq \mu_{\text{free/reduced}}
+    \]
+\end{itemize}
+
+\subsection{Suposiciones}
+
+Para realizar este contraste, consideramos las siguientes suposiciones:
+
+\begin{itemize}
+    \item \textbf{Distribución normal}: Se asume que las puntuaciones de \texttt{math.score} en cada grupo siguen una distribución aproximadamente normal, lo cual suele ser una suposición razonable en muestras grandes.
+    
+    \item \textbf{Varianzas iguales}: Suponemos que las varianzas de \texttt{math.score} son iguales en ambos grupos. Esta suposición permite realizar el test t de Student de forma más directa.
+\end{itemize}
+
+\subsection{Selección del test}
+
+Dado que estamos comparando las medias de dos grupos independientes con varianzas iguales, el contraste más adecuado es un test t de Student para muestras independientes.
+
+\subsection{Nivel de significancia}
+
+Seleccionamos un nivel de significancia de \( \alpha = 0.05 \), que es común en estudios estadísticos para evaluar si los resultados son significativos.
+
+\subsection{Realización del contraste de hipótesis usando el test t de Student}
+
+```{r}
+# Filtrar los datos por tipo de lunch
+lunch_standard <- subset(datos$math.score, datos$lunch == "standard")
+lunch_free_reduced <- subset(datos$math.score, datos$lunch == "free/reduced")
+
+# Realizar el test t de Student
+t_test_result <- t.test(lunch_standard, lunch_free_reduced, var.equal = TRUE)
+
+# Mostrar resultados del test
+print(t_test_result)
+```
+Vemos que los estudiantes que reciben almuerzo \textit{standard} tienen una media de puntuación en matemáticas de aproximadamente \textbf{70.03}, mientras que aquellos con almuerzo \textit{free/reduced} tienen una media de \textbf{58.92}. Esta diferencia inicial entre las medias es la base para el contraste de hipótesis.
+
+El valor de t alto (\textbf{11.837}) indica una gran diferencia relativa entre las medias, en función de la variabilidad de las puntuaciones.
+
+Dado que el p-valor es extremadamente bajo **(\(< 2.2 \times 10^{-16}\))** y mucho menor que el umbral **\(\alpha = 0.05\)**, rechazamos la hipótesis nula (\(H_0\)), esto significa que hay evidencia estadísticamente significativa de que existe una diferencia en el rendimiento en matemáticas entre los dos grupos de almuerzo.
+
+El intervalo de confianza indica que estamos \textbf{95\%} seguros de que la verdadera diferencia en las medias de \texttt{math.score} entre los grupos \textit{standard} y \textit{free/reduced} está entre **9.27** y **12.96**. Como este intervalo no incluye el valor **0**, confirma aún más que hay una diferencia estadísticamente significativa entre las medias.
+
+\subsection{Conclusión}
+
+Dado el p-valor extremadamente bajo y el intervalo de confianza que no incluye el **0**, concluimos que hay una diferencia significativa en los puntajes de matemáticas entre los estudiantes que reciben almuerzo \textit{standard} y aquellos que reciben almuerzo \textit{free/reduced}. Específicamente, los estudiantes con almuerzo \textit{standard} tienden a obtener puntajes más altos en matemáticas en comparación con los estudiantes con almuerzo \textit{free/reduced}.
+
+# Tabla contingencia dos variables discretas
+
+```{r}
+tabla_contingencia <- table(datos$race.ethnicity, datos$parental.level.of.education)
+tabla_contingencia
+```
+
+La tabla de contingencia muestra la distribución del nivel de educación parental según el grupo racial/étnico.
+
+```{r}
+# Generar una paleta de colores usando 'viridis'
+colores <- viridis(nrow(tabla_contingencia))
+
+# Ajustar los márgenes para dejar más espacio en la parte inferior
+par(mar = c(7, 4, 4, 2) + 0.1)
+
+# Crear un gráfico de barras apilado 
+barplot(tabla_contingencia, 
+        beside = FALSE,  
+        col = colores,  
+        main = "Distribución del Nivel de Educación Parental por Raza/Etnicidad",  
+        ylab = "Frecuencia", 
+        las = 2,  
+        cex.names = 0.8,  
+        ylim = c(0, 250),  
+        space = 0.2)  
+
+# Agregar la leyenda 
+legend_pos <- legend("topright", 
+       legend = rownames(tabla_contingencia),  
+       fill = colores,  
+       title = "Grupo Racial/Etnicidad",  
+       cex = 0.8, 
+       inset = c(-0.005, -0.02),
+       bty = "n")  
+```
+
+El gráfico de barras apilado facilita la visualización de cómo las diferentes categorías de educación parental se distribuyen entre los grupos étnicos. Por ejemplo, el grupo C tiene una alta proporción de padres con _associate's degree_, _high_School_ y _some college_, además podemos ver como hay pocas observaciones con _master's degree_ independientemente del grupo étnico al que pertenezcan.
