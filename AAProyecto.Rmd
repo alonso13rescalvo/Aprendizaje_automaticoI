@@ -4,6 +4,23 @@ author: "Marc Gil Arnau"
 date: "2025-02-04"
 output: html_document
 ---
+# Introducción
+El conjunto de datos sirve para intentar predecir como de probables es sufrir un derrame cerebral a partir de unos parámetros.
+Los datos han sido extraídos del [repositorio kaggle prediccion derrame cerebral](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset).Según el propio contexto que nos indica el dataset acerca de los datos, según la OMS las muertes por derrames cerebrales son la segunda causa de mortalidad , siendo estas responsables de aproximadamente el 11% de las muertes en el mundo.
+Este conjunto de datos se utiliza para predecir si es probable que un paciente sufra un accidente cerebrovascular en función de parámetros de entrada como el sexo, la edad, diversas enfermedades y el tabaquismo. Cada fila de los datos proporciona información relevante sobre el paciente.
+Según la descripción oficial de los datos, las variables que conforman el conjunto de datos son:
+1) id: identificador
+2) gender: "Masculino", "Femenino", "Otros"
+3) age: Edad del paciente en años
+4) hypertension: 0 si el paciente no tiene hipertensión, 1 si el paciente tiene hipertensión
+5) heart_disease: 0 si el paciente no tiene ninguna enfermedad en el corazón, 1 si el paciente tiene una enfermedad en el corazón
+6) ever_married: "No" or "Yes"
+7) work_type: "children"(niño, aun no esta en edad de trabajar), "Govt_jov"(no tenemos muy claro a que se refiere), "Never_worked"(Nunca ha trabajado), "Private"(trabaja en el sector privado) or "Self-employed"(autónomo)
+8) Residence_type: "Rural" or "Urban"
+9) avg_glucose_level: media de glucosa en sangre
+10) bmi: indice de masa corporal (IMC)
+11) smoking_status: "formerly smoked"(antes fumaba), "never smoked"(nunca ha fumado), "smokes"(fumador) or "Unknown"(no se sabe si fuma o no, o si ha fumado)
+12) stroke: 1 si ha sufrido un derrame o 0 si no
 Cargamos los datos
 
 ```{r}
