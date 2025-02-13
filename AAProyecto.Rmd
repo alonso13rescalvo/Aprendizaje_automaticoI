@@ -86,4 +86,26 @@ dim(train)
 dim(test)
 dim(val)
 ```
+
+Limpiamos los datos excluyendo los datos donde ponga Unknow
+
 ```{r}
+
+stroke_data_clean <- stroke_data
+
+# Ver el conjunto de datos limpio antes de hacer cambios
+View(stroke_data_clean)
+
+# Reemplazar "Unknown" por NA en la columna 'smoking_status'
+stroke_data_clean$smoking_status[stroke_data_clean$smoking_status == "Unknown"] <- NA
+stroke_data_clean$bmi[stroke_data_clean$bmi == "N/A"] <- NA
+# Eliminar las filas que contienen valores NA
+#stroke_data_clean <- na.omit(stroke_data_clean)
+
+# Ver las dimensiones del nuevo conjunto de datos limpio
+dim(stroke_data_clean)
+
+# Ver el conjunto de datos limpio después de eliminar filas con NA
+View(stroke_data_clean)
+
+```
