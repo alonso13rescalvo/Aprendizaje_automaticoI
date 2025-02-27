@@ -30,8 +30,36 @@ stroke_data <- healthcare_dataset_stroke_data
 #View(stroke_data)
 dim(stroke_data)
 ```
+Limpiamos los datos camnbiando los Unknow por NA y los NA en string por numericos
 
+```{r}
 
+stroke_data_clean <- stroke_data
+
+# Ver el conjunto de datos limpio antes de hacer cambios
+View(stroke_data_clean)
+stroke_data$bmi <- as.numeric(stroke_data$bmi)
+# Reemplazar "Unknown" por NA en la columna 'smoking_status'
+stroke_data_clean$smoking_status[stroke_data_clean$smoking_status == "Unknown"] <- NA
+stroke_data_clean$bmi[stroke_data_clean$bmi == "N/A"] <- NA
+stroke_data_clean$bmi <- as.numeric(stroke_data_clean$bmi)
+# Eliminar las filas que contienen valores NA
+#stroke_data_clean <- na.omit(stroke_data_clean)
+
+# Ver las dimensiones del nuevo conjunto de datos limpio
+dim(stroke_data_clean)
+
+# Ver el conjunto de datos limpio después de eliminar filas con NA
+View(stroke_data_clean)
+
+```
+Vamos A observar los datos faltantes que hay
+```{r}
+str(stroke_data_clean)
+# Verificar cuántos valores faltan por columna
+colSums(is.na(stroke_data_clean))
+
+```
 Vamos a hacer una partición en train-test-validation.
 Fiajamos la semilla porque hay aleatoriedad.
 ```{r}
@@ -89,23 +117,155 @@ dim(val)
 
 Limpiamos los datos excluyendo los datos donde ponga Unknow
 
+Binarizamos la variable smoking status para poder trabajar con esos valores si ha fumado alguna vez 1 y si no fuma 0
 ```{r}
 
-stroke_data_clean <- stroke_data
 
-# Ver el conjunto de datos limpio antes de hacer cambios
+# 6️⃣ Binarizar la columna 'smoking_status' (1 para 'formerly smoked' y 'smokes', 0 en caso contrario)
+stroke_data_clean$smoking_status_binary <- ifelse(is.na(stroke_data_clean$smoking_status), NA,
+                                                 ifelse(stroke_data_clean$smoking_status %in% c("formerly smoked", "smokes"), 1, 0))
+
+stroke_data_clean$Residence_type_binary <- ifelse(stroke_data_clean$Residence_type %in% c("Rural"), 1, 0)
+# 7️⃣ Verificar los resultados de la binarización
+table(stroke_data_clean$smoking_status, stroke_data_clean$smoking_status_binary)
+
+# 8️⃣ Ver el conjunto de datos limpio después de la binarización
 View(stroke_data_clean)
+```
 
-# Reemplazar "Unknown" por NA en la columna 'smoking_status'
-stroke_data_clean$smoking_status[stroke_data_clean$smoking_status == "Unknown"] <- NA
-stroke_data_clean$bmi[stroke_data_clean$bmi == "N/A"] <- NA
-# Eliminar las filas que contienen valores NA
-#stroke_data_clean <- na.omit(stroke_data_clean)
+Realizamos matriz de correlacion de todas las variables númericas, se han incluidolos datos binarizados
+```{r}
+# Cargar las bibliotecas necesarias
+library(ggplot2)
+library(corrplot)
 
-# Ver las dimensiones del nuevo conjunto de datos limpio
-dim(stroke_data_clean)
+# Filtrar solo las columnas numéricas de 'stroke_data_clean'
+stroke_clean_numeric <- na.omit(stroke_data_clean[sapply(stroke_data_clean, is.numeric)])
 
-# Ver el conjunto de datos limpio después de eliminar filas con NA
-View(stroke_data_clean)
+# Calcular la matriz de correlación solo para las columnas numéricas
+cor_matrix <- cor(stroke_clean_numeric)
+
+# Visualizar la matriz de correlación
+corrplot(cor_matrix, 
+         method = "color", 
+         col = colorRampPalette(c("blue", "white", "red"))(200), 
+         addCoef.col = "black", 
+         tl.col = "black", 
+         tl.cex = 0.8, 
+         title = "Matriz de correlación")
+
+
 
 ```
+En el gráfico, se puede observar respecto a la variable objetivo, que los datos con más relevancia son la edad, la hypertensión, si ha tenido ataques al corazon y el nivel de la glucosa
+
+```{r}
+summary(stroke_clean_numeric)
+```
+
+Grafico de numero de personas segun su tipo de trabajo, se observa que hay muchas más pertenecientes al sector privado.
+```{r}
+ggplot(data = stroke_data_clean) +
+  geom_bar(mapping = aes(x = work_type))
+```
+```{r}
+library(ggplot2)
+
+# Histograma para la distribución de la edad
+ggplot(stroke_data_clean, aes(x = age)) +
+  geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribución de la Edad", x = "Edad", y = "Frecuencia")
+# Gráfico de barras para la variable 'gender'
+ggplot(stroke_data_clean, aes(x = gender)) +
+  geom_bar(fill = "lightblue", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribución del Género", x = "Género", y = "Frecuencia")
+
+# Gráfico de barras para la variable 'smoking_status'
+ggplot(stroke_data_clean, aes(x = smoking_status)) +
+  geom_bar(fill = "lightgreen", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribución del Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Frecuencia")
+
+
+```
+
+
+```{r}
+# Boxplot para la edad en función de si se sufrió un derrame cerebral
+ggplot(stroke_data_clean, aes(x = factor(stroke), y = age, fill = factor(stroke))) +
+  geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Edad según Derrame Cerebral", x = "Derrame Cerebral", y = "Edad")
+
+```
+Se estudia mas en detalle la relacion entre age y stroke. Finalmente se puede observar como se comento en la matriz de correlacion que tiene una relacion positiva. La gente con mayor edad a tenido un derrame. Hay dos casos aislados mas abajo de un bebe y un joven pero tras ivestigar si es posible que un bebe tenga un derrame por lo que es algo anomalo pero no imposible. Por lo que en proporción a cuanto más edad tengamos más probable sera que tengamos un derrame
+
+
+
+```{r}
+# Boxplot para los niveles de glucosa en función de si se sufrió un derrame cerebral
+ggplot(train, aes(x = factor(stroke), y = avg_glucose_level, fill = factor(stroke))) + geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Glucosa Promedio según Derrame Cerebral", x = "Derrame Cerebral", y = "Nivel de Glucosa")
+
+```
+Se ha estudiado la relacion entre la glucosa y stroke. Se observa que tienen una relacion entre cuanto mas alto tengas el nivel de glucosa mas gente puede llegar a tener un derrame
+
+```{r}
+ggplot(stroke_data_clean, aes(x = factor(hypertension), fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Hipertensión", x = "Hipertensión", y = "Proporción")
+
+ggplot(stroke_data_clean, aes(x = factor(heart_disease), fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Hipertension", x = "Hipertension", y = "Proporción")
+
+```
+
+```{r}
+# Gráfico de barras para 'work_type' según si ha habido un derrame cerebral
+ggplot(train, aes(x = work_type, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Distribución de 'Work Type' según Derrame Cerebral", x = "Tipo de Trabajo", y = "Proporción")
+
+```
+En este grafico se relaciona el tipo de trabajo con stroke. Se obseerva que en proporción los que trabajan para si mismos y trabajan para el sector privado tienen mas derrames. Pero no es nada concluyente ni muy
+```{r}
+# Gráfico de barras para el estado de tabaquismo binarizado según el derrame cerebral
+ggplot(train, aes(x = smoking_status, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Proporción")
+
+```
+
+
+```{r}
+ggplot(stroke_data_clean, aes(x = Residence_type, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Residencia (Urbano/Rural)", x = "Tipo de Residencia", y = "Proporción")
+
+```
+
+```{r}
+# Boxplot para BMI según si ha habido un derrame cerebral
+ggplot(stroke_data_clean, aes(x = factor(stroke), y = bmi, fill = factor(stroke))) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribución del BMI según Derrame Cerebral", x = "Derrame Cerebral", y = "Índice de Masa Corporal (BMI)") +
+  scale_fill_manual(values = c("lightblue", "lightcoral"))
+
+```
+
+
+```{r}
+ggplot(stroke_data_clean, aes(x = bmi, fill = factor(stroke))) +
+  geom_histogram(binwidth = 2, alpha = 0.7, position = "dodge") +
+  theme_minimal() +
+  labs(title = "Distribución de BMI según Derrame Cerebral", x = "Índice de Masa Corporal", y = "Frecuencia")
+
+```
+
+
