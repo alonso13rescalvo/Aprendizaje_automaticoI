@@ -1,0 +1,312 @@
+---
+title: "Práctica Aprendizaje Automático"
+author: "Alonso Rescalvo Casas, Gabriel Carlos Suárez Chiquito y Marc Gil Arnau. Grupo 2"
+date: "2025-02-16"
+output: html_document
+---
+
+# 1) Comprensión del problema. Explicación. Lectura de datos. Particiones.
+
+El conjunto de datos sirve para intentar predecir cómo de probable es sufrir un derrame cerebral a partir de unos parámetros. Los datos han sido extraídos del [repositorio Kaggle predicción derrame cerebral](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset). Según la OMS, los derrames cerebrales son la segunda causa de mortalidad, responsables de aproximadamente el 11% de las muertes en el mundo.
+
+Este conjunto de datos permite predecir si es probable que un paciente sufra un accidente cerebrovascular en función de parámetros como el sexo, la edad, diversas enfermedades y el tabaquismo. Cada fila de los datos proporciona información relevante sobre el paciente.
+
+### Variables del dataset:
+
+1)  id: Identificador único
+2)  gender: "Masculino", "Femenino", "Otros"
+3)  age: Edad del paciente en años
+4)  hypertension: 0 si no tiene hipertensión, 1 si tiene hipertensión
+5)  heart_disease: 0 si no tiene enfermedades cardíacas, 1 si tiene
+6)  ever_married: "No" o "Yes"
+7)  work_type: "children", "Govt_job", "Never_worked", "Private", "Self-employed"
+8)  Residence_type: "Rural" o "Urban"
+9)  avg_glucose_level: Media de glucosa en sangre
+10) bmi: Índice de masa corporal (IMC)
+11) smoking_status: "formerly smoked", "never smoked", "smokes", "Unknown"
+12) stroke: 1 si ha sufrido un derrame, 0 si no
+
+### Carga y exploración inicial de los datos
+
+```{r}
+library(readr)
+library(dplyr)
+library(caret)
+library(ggplot2)
+library(corrplot)
+
+# Cargamos los datos
+datos <- read.csv("/home/alumnos/marc/DataScience/archive/healthcare-dataset-stroke-data.csv", sep=",", header=TRUE)
+
+# Primer vistazzo a los datos
+str(datos)
+head(datos)
+summary(datos)
+```
+
+Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
+
+```{r}
+table(datos$bmi)
+```
+
+Vemos que hay 201 valores faltantes pero están como N/A y no como NA, por eso trata la variable como chr.
+
+### Limpieza de datos
+
+```{r}
+# Convertimos los valores "N/A" en NA
+datos$bmi[datos$bmi == "N/A"] <- NA
+datos$bmi <- as.numeric(datos$bmi)  # Convertimos BMI a numérico
+```
+
+### Partición en train-test-validation
+
+```{r}
+set.seed(10)
+
+ntotal <- dim(datos)[1]
+indices <- 1:ntotal
+ntrain <- ntotal * 0.6
+indices_train <- sample(indices, ntrain, replace = FALSE)
+
+indices_restantes <- indices[-indices_train]
+ntest <- length(indices_restantes) * 0.5
+indices_test <- sample(indices_restantes, ntest, replace = FALSE)
+indices_val <- indices[-c(indices_train, indices_test)]
+
+train <- datos[indices_train,]
+test <- datos[indices_test,]
+val <- datos[indices_val,]
+
+# Comprobamos la partición
+dim(train)
+dim(test)
+dim(val)
+```
+
+# 2) Preparación de datos y análisis exploratorio de datos.
+
+### Tamaño del dataset 
+
+```{r}
+dim(datos)
+```
+
+Hay 5110 observaciones y 12 variables.
+
+### Tipos de variables
+
+```{r}
+str(datos)
+```
+
+Variables discretas: id, hypertension, heart_disease y stroke.
+
+Variables continuas: age, avg_glucose_level y bmi.
+
+Variables texto: gender, ever_married, work_type, Residence_type y smoking_status.
+
+### Binarización de variables categóricas
+
+Hay dos variables que se pueden binarizar, el residence_type y el smoking_status.
+
+```{r}
+table(datos$smoking_status)
+table(datos$Residence_type)
+```
+
+Como hay valores que desconocemos de smoking_status los trataremos como NA.
+
+```{r}
+datos$smoking_status[datos$smoking_status == "Unknown"] <- NA
+table(datos$smoking_status)
+```
+
+Vamos a binarizar el residence_type con un 0 si es rural y un 1 si es urbano, y el smoking_status con un 1 si están o han fumado y un 0 si nunca han fumado.
+
+```{r}
+datos$smoking_status_binary <- ifelse(is.na(datos$smoking_status), NA,
+                                      ifelse(datos$smoking_status %in% c("formerly smoked", "smokes"), 1, 0))
+datos$Residence_type_binary <- ifelse(datos$Residence_type == "Urban", 1, 0)
+cat("smoking_status")
+table(datos$smoking_status_binary)
+cat("residence_type")
+table(datos$Residence_type_binary)
+```
+
+### Valores faltantes
+
+```{r}
+colSums(is.na(datos))
+```
+
+Solo hay dos variables con valores faltantes, bmi y smoking_status.
+
+### Matriz de correlación
+
+```{r}
+stroke_clean_numeric <- na.omit(datos[sapply(datos, is.numeric)])
+cor_matrix <- cor(stroke_clean_numeric)
+corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white", "red"))(200), addCoef.col = "black", tl.col = "black", tl.cex = 0.8, title = "Matriz de correlación")
+```
+En el gráfico, se puede observar respecto a la variable objetivo, que los datos con más relevancia son la edad, la hypertensión, si ha tenido ataques al corazon y el nivel de la glucosa.
+
+Y tenemos claro que la columna "id" no será relevante en nuestro modelo, después de todo, el ID de una persona registrada no tendrá influencia en el diagnóstico (no tendré un tumor sólo por mi ID).
+Por lo tanto, podemos eliminar esta columna de nuestro conjunto de datos, para no influir en la construcción del modelo.
+
+```{r}
+# Eliminamos la columna id
+datos <- datos[, -which(names(datos) == "id")]
+str(datos)
+```
+
+### Gráficos exploratorios
+
+```{r}
+ggplot(datos) + geom_bar(aes(x = work_type))
+
+ggplot(datos, aes(x = age)) + geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) + theme_minimal() + labs(title = "Distribución de la Edad", x = "Edad", y = "Frecuencia")
+
+ggplot(datos, aes(x = gender)) + geom_bar(fill = "lightblue", color = "black") + theme_minimal() + labs(title = "Distribución del Género", x = "Género", y = "Frecuencia")
+
+ggplot(datos, aes(x = smoking_status)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución del Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Frecuencia")
+```
+
+
+
+
+
+```{r}
+stroke_data_clean <- datos
+stroke_clean_numeric <- na.omit(datos[sapply(datos, is.numeric)])
+```
+
+```{r}
+# Boxplot para la edad en función de si se sufrió un derrame cerebral
+ggplot(stroke_data_clean, aes(x = factor(stroke), y = age, fill = factor(stroke))) +
+  geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Edad según Derrame Cerebral", x = "Derrame Cerebral", y = "Edad")
+
+```
+Se estudia mas en detalle la relacion entre age y stroke. Finalmente se puede observar como se comento en la matriz de correlacion que tiene una relacion positiva. La gente con mayor edad a tenido un derrame. Hay dos casos aislados mas abajo de un bebe y un joven pero tras ivestigar si es posible que un bebe tenga un derrame por lo que es algo anomalo pero no imposible. Por lo que en proporción a cuanto más edad tengamos más probable sera que tengamos un derrame
+
+
+
+```{r}
+# Boxplot para los niveles de glucosa en función de si se sufrió un derrame cerebral
+ggplot(train, aes(x = factor(stroke), y = avg_glucose_level, fill = factor(stroke))) + geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Glucosa Promedio según Derrame Cerebral", x = "Derrame Cerebral", y = "Nivel de Glucosa")
+
+```
+Se ha estudiado la relacion entre la glucosa y stroke. Se observa que tienen una relacion entre cuanto mas alto tengas el nivel de glucosa mas gente puede llegar a tener un derrame
+
+```{r}
+ggplot(stroke_data_clean, aes(x = factor(hypertension), fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Hipertensión", x = "Hipertensión", y = "Proporción")
+
+ggplot(stroke_data_clean, aes(x = factor(heart_disease), fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Hipertension", x = "Hipertension", y = "Proporción")
+
+```
+
+```{r}
+# Gráfico de barras para 'work_type' según si ha habido un derrame cerebral
+ggplot(train, aes(x = work_type, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Distribución de 'Work Type' según Derrame Cerebral", x = "Tipo de Trabajo", y = "Proporción")
+
+```
+En este grafico se relaciona el tipo de trabajo con stroke. Se obseerva que en proporción los que trabajan para si mismos y trabajan para el sector privado tienen mas derrames. Pero no es nada concluyente ni muy
+```{r}
+# Gráfico de barras para el estado de tabaquismo binarizado según el derrame cerebral
+ggplot(train, aes(x = smoking_status, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Proporción")
+
+```
+
+
+```{r}
+ggplot(stroke_data_clean, aes(x = Residence_type, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Residencia (Urbano/Rural)", x = "Tipo de Residencia", y = "Proporción")
+
+```
+
+```{r}
+# Boxplot para BMI según si ha habido un derrame cerebral
+ggplot(stroke_data_clean, aes(x = factor(stroke), y = bmi, fill = factor(stroke))) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribución del BMI según Derrame Cerebral", x = "Derrame Cerebral", y = "Índice de Masa Corporal (BMI)") +
+  scale_fill_manual(values = c("lightblue", "lightcoral"))
+
+```
+
+
+```{r}
+ggplot(stroke_data_clean, aes(x = bmi, fill = factor(stroke))) +
+  geom_histogram(binwidth = 2, alpha = 0.7, position = "dodge") +
+  theme_minimal() +
+  labs(title = "Distribución de BMI según Derrame Cerebral", x = "Índice de Masa Corporal", y = "Frecuencia")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### PCA para reducción de dimensionalidad
+
+```{r}
+PCA <- prcomp(~bmi + age + avg_glucose_level, data = datos, scale = TRUE)
+cat("Matriz de rotación o de pesos W: \n")
+PCA$rotation
+```
+
+```{r}
+plot(PCA)
+summary(PCA)
+biplot(PCA)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
