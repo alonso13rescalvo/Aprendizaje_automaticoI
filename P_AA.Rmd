@@ -173,15 +173,6 @@ ggplot(datos, aes(x = gender)) + geom_bar(fill = "lightblue", color = "black") +
 ggplot(datos, aes(x = smoking_status)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución del Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Frecuencia")
 ```
 
-### ¿Es posible identificar la distribución que siguen las variables?
-
-```{r}
-# Cargar librerías necesarias
-library(ggplot2)       # Para visualización
-library(nortest)       # Para pruebas de normalidad
-
-
-#variable age
 variable <- train$age 
 
 # Visualización: Histograma con densidad
