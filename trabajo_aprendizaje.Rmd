@@ -1,0 +1,444 @@
+---
+title: "Análisis de Stroke por Edad"
+author: "Tu Nombre"
+date: "`r Sys.Date()`"
+output:  
+  html_document:
+    toc: true        # Activa el índice (table of contents)
+    toc_float: true  # Hace que el índice sea flotante en HTML
+    number_sections: true # Numera los títulos
+    theme: cerulean  # Tema visual
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+# 1) Comprensión del problema. Explicación. Lectura de datos. Particiones.
+
+El conjunto de datos sirve para intentar predecir cómo de probable es sufrir un derrame cerebral a partir de unos parámetros.
+Los datos han sido extraídos del [repositorio Kaggle predicción derrame cerebral](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset).
+Según la OMS, los derrames cerebrales son la segunda causa de mortalidad, responsables de aproximadamente el 11% de las muertes en el mundo.
+
+Este conjunto de datos permite predecir si es probable que un paciente sufra un accidente cerebrovascular en función de parámetros como el sexo, la edad, diversas enfermedades y el tabaquismo.
+Cada fila de los datos proporciona información relevante sobre el paciente.
+
+### Variables del dataset:
+
+1)  id: Identificador único
+2)  gender: "Masculino", "Femenino", "Otros"
+3)  age: Edad del paciente en años
+4)  hypertension: 0 si no tiene hipertensión, 1 si tiene hipertensión
+5)  heart_disease: 0 si no tiene enfermedades cardíacas, 1 si tiene
+6)  ever_married: "No" o "Yes"
+7)  work_type: "children", "Govt_job", "Never_worked", "Private", "Self-employed"
+8)  Residence_type: "Rural" o "Urban"
+9)  avg_glucose_level: Media de glucosa en sangre
+10) bmi: Índice de masa corporal (IMC)
+11) smoking_status: "formerly smoked", "never smoked", "smokes", "Unknown"
+12) stroke: 1 si ha sufrido un derrame, 0 si no
+
+### Carga y exploración inicial de los datos
+
+```{r}
+library(readr)
+library(dplyr)
+library(caret)
+library(ggplot2)
+library(corrplot)
+
+# Cargamos los datos
+datos <- read.csv("D:/UNI/Regresion/healthcare-dataset-stroke-data.csv", sep=",", header=TRUE)
+
+# Primer vistazzo a los datos
+str(datos)
+head(datos)
+View(datos)
+
+```
+
+Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
+
+```{r}
+table(datos$bmi)
+```
+
+Vemos que hay 201 valores faltantes pero están como N/A y no como NA, por eso trata la variable como chr.
+
+### Limpieza de datos
+
+Ponemos los datos faltantes que estan como char en verdaderos datos faltantes como NA
+
+```{r}
+# Convertimos los valores "N/A" en NA en bmi
+datos$bmi[datos$bmi == "N/A"] <- NA
+#Convertimos datos faltantes unknown en NA
+datos$smoking_status[datos$smoking_status == "Unknown"]<-NA
+
+#Comprobamos que se ha cambiado correctamente
+table(datos$bmi)
+table(datos$smoking_status)
+View(datos)
+
+```
+
+### Partición en train-test-v
+
+Validation
+
+```{r}
+set.seed(10)
+
+ntotal <- dim(datos)[1]
+indices <- 1:ntotal
+ntrain <- ntotal * 0.6
+indices_train <- sample(indices, ntrain, replace = FALSE)
+
+indices_restantes <- indices[-indices_train]
+ntest <- length(indices_restantes) * 0.5
+indices_test <- sample(indices_restantes, ntest, replace = FALSE)
+indices_val <- indices[-c(indices_train, indices_test)]
+
+train <- datos[indices_train,]
+test <- datos[indices_test,]
+val <- datos[indices_val,]
+
+# Comprobamos la partición
+dim(train)
+dim(test)
+dim(val)
+```
+
+# 2) Preparación de datos y análisis exploratorio de datos.
+
+Ver dimensiones de train
+
+```{r}
+dim(train)
+```
+
+Se observa que tiene 3066 observaciones y 12 variables.
+
+Vemos el tipo de datos que tenemos en train
+
+```{r}
+str(train)
+```
+
+Variables discretas: id, hypertension, heart_disease y stroke.
+
+Variables continuas: age, avg_glucose_level y bmi.
+
+Variables texto: gender, ever_married, work_type, Residence_type y smoking_status.
+
+Se observa que hay tres variables continuas que son age, avg_glucose_level y bmi que estan en tipo num lo cual es correcto.
+
+Por otro lado las variables residen_type, smoking_status y work_type son de tipo char y tienen que ser factor por lo que las convertimos a tipo factor.
+
+Y tenemos claro que la columna "id" no será relevante en nuestro modelo, después de todo, el ID de una persona registrada no tendrá influencia en el diagnóstico (no tendré un tumor sólo por mi ID).
+Por lo tanto, podemos eliminar esta columna de nuestro conjunto de datos, para no influir en la construcción del modelo.
+
+```{r}
+#borramos coluna id 
+train <- train[, -which(names(train) == "id")]
+```
+
+```{r}
+train$ever_married <- factor(train$ever_married)
+train$Residence_type <- factor(train$Residence_type)
+train$smoking_status <- factor(train$smoking_status)
+train$work_type <- factor(train$work_type)
+train$stroke <- factor(train$stroke)
+train$avg_glucose_level <- factor(train$avg_glucose_level)
+train$heart_disease <- factor(train$heart_disease)
+
+
+
+
+str(train)
+```
+
+Se puede observar que ya esta corregido lo que se observo anteriormente y que ya están en factor.
+
+# Gráficos de distribucion de las variables
+
+Ahora vamos a ver gráficos de la distribución y frecuencia de las algunas de las variables.
+
+```{r}
+#Psar bmi a varuable numerica
+train$bmi <- as.numeric(train$bmi)
+str(train$bmi)
+```
+
+Grafico en función del tipo de trabajo
+
+```{r}
+ggplot(train) + geom_bar(aes(x = work_type))
+```
+
+1)  El primer gráfico muestra el numero de personas segun su sector de trabajo(cildren, govt_job, nerver_worked, Private, Self-eemployed) Se puede observar que la gran mayoria de poblacion trabaja en el sector privado y que ua minoria no trabaja. No se observa ninguna anomalia
+
+```{r}
+ggplot(train, aes(x = age)) + geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) + theme_minimal() + labs(title = "Distribución de la Edad", x = "Edad", y = "Frecuencia")
+```
+
+El histograma muestra la distribución de edades en la población estudiada.
+
+Se puede observar que la frecuencia aumenta a medida que avanza en el rango de edad hasta alrededor de los 55-60 años, donde la barra es más alta.
+A partir de ahí, la frecuencia parece disminuir ligeramente, excepto por una barra muy alta al final.
+
+Esto indica que hay una mayor concentración de individuos en el rango de edad medio-alto (55-60 años), y también hay un grupo considerable de personas de edad avanzada (alrededor de los 80 años).
+
+```{r}
+
+ggplot(train, aes(x = gender)) + geom_bar(fill = "lightblue", color = "black") + theme_minimal() + labs(title = "Distribución del Género", x = "Género", y = "Frecuencia")
+```
+
+El histograma muestra la distribución del género de la muestra estudiada.
+
+Se puede observar que hay más mujeres ("Female") que hombres ("Male") en el conjunto de datos, con una diferencia considerable en las frecuencias.
+
+Por otro lado se muestra una categoría other la cual es una minoria compuesta por un solo miembro.
+
+Decisión sobre la categoría "Other" Dado que la categoría "Other" solo contiene un individuo, mantenerla como una categoría separada podría dificultar el modelado predictivo debido al desequilibrio extremo.
+Para mejorar el modelo, se propone reasignar este individuo a la categoría mayoritaria ("Female" o "Male").
+Esto permitirá reducir el ruido causado por categorías con muy pocos datos.
+
+```{r}
+# Reasignar la categoría "Other" al género mayoritario ("Female")
+train$gender[train$gender == "Other"] <- "Female"
+# Verificar nuevamente las frecuencias
+table(train$gender)
+```
+
+Como se obserba la categoria other ha desaparecido y la categoria Female tiene un individuo adicional.
+
+```{r}
+ggplot(train, aes(x = smoking_status)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución del Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Frecuencia")
+```
+
+```{r}
+ggplot(train, aes(x = stroke)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución de stroke", x = "Stroke", y = "Frecuencia")
+```
+
+## Comparar variable objetivo respecto a las distintas variables
+
+### Stroke vs age
+
+```{r}
+str(train$stroke)
+# Gráfico de densidad con 'stroke' como factor
+ggplot(train, aes(x = age, color = stroke)) +
+  geom_density(lwd = 2, linetype = 1) +
+  theme_minimal() +
+  labs(title = "Distribución de la Edad según Derrame Cerebral",
+       x = "Edad Logarítmica", y = "Densidad")
+
+ggplot(train, aes(x = age, fill = stroke)) +
+  geom_histogram(binwidth = 2, alpha = 0.7, position = "dodge") +
+  theme_minimal() +
+  labs(title = "Distribución de Edad según Derrame Cerebral", 
+       x = "Edad", 
+       y = "Frecuencia")
+```
+
+En estos dos gráficos se puede observar que la edad y la posibilidad de tener un derrame se ve aumentada considerablemente según la edad aumenta.
+
+```{r}
+
+ggplot(datos) +
+  geom_point(aes(x = age, y = stroke), stat = "summary", fun = "mean") +
+  ggtitle("Probabilidad de derrame según Edad") +
+  ylab("Stroke probability")
+
+```
+
+Se observa que a edades tempranas (0-30 años), la probabilidad de sufrir un derrame cerebral es cercana a 0.
+A partir de los 40 años, la probabilidad comienza a aumentar gradualmente.
+A partir de los 60-80 años, hay un incremento notable en la probabilidad de sufrir un derrame.
+Interpretación:
+
+El gráfico sugiere que la edad está positivamente correlacionada con el riesgo de sufrir un derrame cerebral.
+En edades avanzadas (mayores de 60-70 años), la probabilidad se vuelve mucho más alta, lo cual es consistente con lo que se espera en estudios médicos.
+
+A su vez se observa un repunte en un año de la probabilidad de tener un derrame ya que hubo un bebe que tuve un derrame es un caso fuera de lo normal y al ser la muestra no muy grande hay un repunte.
+
+```{r}
+ggplot(datos) +
+  stat_summary_bin(aes(x = age, y = stroke), bins = 10, fun = "mean", geom = "col", fill = "steelblue") +
+  ggtitle("Probabilidad de derrame según Edad, agrupado") +
+  xlab("Age Group") +
+  ylab("Stroke probability") +
+  theme_minimal()
+
+
+```
+
+Este gráfico agrupa a las personas en grupos de 10 en 10, y ya no se muestra ese repunte que se observaba en el gráfico anterior debido que al agruparlos hay más muestras, se sigue observando la misma tendencia a cuanto más edad, mayor es la probabilidad de tener un derrame
+
+```{r}
+# Boxplot para la edad en función de si se sufrió un derrame cerebral
+ggplot(train, aes(x = (stroke), y = age, fill = stroke)) +
+  geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Edad según Derrame Cerebral", x = "Derrame Cerebral", y = "Edad")
+```
+
+La gente con mayor edad a tenido un derrame.
+Hay dos casos aislados mas abajo de un bebe y un joven pero tras ivestigar si es posible que un bebe tenga un derrame por lo que es algo anomalo pero no imposible.
+Por lo que en proporción a cuanto más edad tengamos más probable sera que tengamos un derrame
+
+### Stroke vs BMI
+
+```{r}
+ggplot(na.omit(train), aes(x = bmi, fill = factor(stroke))) +
+  geom_histogram(binwidth = 2, alpha = 0.7, position = "dodge") +
+  theme_minimal() +
+  labs(title = "Distribución de BMI según Derrame Cerebral", x = "Índice de Masa Corporal", y = "Frecuencia")
+ggplot(na.omit(train), aes(x = bmi, color = stroke)) +
+  geom_density(lwd = 2, linetype = 1) +
+  theme_minimal() +
+  labs(title = "Distribución de BMI según densidad de Derrame Cerebral",
+       x = "BMI", y = "Densidad")
+```
+
+El primer gráfico muestra la frecuencia de que una persona tuviera un derrame según su bmi.
+En este gráfico no podemos observar ninguna tendencia muy bien y se podria lleagr a decir que el bmi no afecta en tener un derrame.
+
+Pero si lo comparamos el segundo confirmamos lo que decíamos previamente, y el bmi no afecta al riesgo de tener un derrame cerebral o aumenta muy ligeramnete el riesgo.
+
+```{r}
+# Boxplot para BMI según si ha habido un derrame cerebral
+ggplot(na.omit(train), aes(x = stroke, y = bmi, fill = stroke)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribución del BMI según Derrame Cerebral", x = "Derrame Cerebral", y = "Índice de Masa Corporal (BMI)") +
+  scale_fill_manual(values = c("lightblue", "lightcoral"))
+
+```
+
+En el boxplot se observa lo visto anteriormente, que el bmi no tiene mucha relevancia en cuanto a tener un derrame.
+
+### Stroke vs Glucosa
+
+```{r}
+# Boxplot para los niveles de glucosa en función de si se sufrió un derrame cerebral
+ggplot(train, aes(x = factor(stroke), y = avg_glucose_level, fill = factor(stroke))) + geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Glucosa Promedio según Derrame Cerebral", x = "Derrame Cerebral", y = "Nivel de Glucosa")
+
+```
+
+Se ha estudiado la relacion entre la glucosa y stroke.
+Se observa que tienen una relacion entre cuanto mas alto tengas el nivel de glucosa mas gente puede llegar a tener un derrame
+
+```{r}
+
+ggplot(na.omit(train), aes(x = avg_glucose_level, color = stroke)) +
+  geom_density(lwd = 2, linetype = 1) +
+  theme_minimal() +
+  labs(title = "Distribución de Nivel de glucosa según densidad de Derrame Cerebral",
+       x = "Nivel de glucosa", y = "Densidad")
+```
+
+En este gráfico de la Distribución de Nivel de glucosa según la densidad de Derrame Cerebral, se puede observar lo dicho anteriormente que ha cuanto mayor sea el nivel de glucosa mayor sera la probabilidad de que se tenga un derrame.
+
+Las personas sin derrame cerebral tienden a tener niveles de glucosa más concentrados en rangos bajos (80-100)
+
+
+###Stroke vs Heart disease
+```{r}
+
+ggplot(train, aes(x = factor(heart_disease), fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según probkemas del corazón", x = "Problemas Cardíacos", y = "Proporción")
+
+```
+
+Este gráfico de barras apiladas muestra la proporción de derrames cerebrales (stroke) en función de si una persona tiene problemas cardíacos o no.
+
+La proporción de personas con derrame cerebral es mayor en el grupo con problemas cardíacos, lo que nos dice que si hemos sufrido de algún problema del corazon somos más propensos a tener un derrame.
+
+### Stroke vs Smoking Status
+
+```{r}
+# Gráfico de barras para el estado de tabaquismo binarizado según el derrame cerebral
+ggplot(train, aes(x = smoking_status, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Proporción")
+
+```
+
+Este gráfico de barras apiladas muestra la proporción de personas que han sufrido un derrame cerebral ("stroke") según su estado de tabaquismo.
+
+En todas las categorías de tabaquismo, la proporción de personas que han sufrido un derrame cerebral es pequeña en comparación con las que no han sufrido uno. 
+Se observa un pequeño aumento en las personas que han llegado a fumar alguna vez
+
+```{r}
+
+ggplot(train, aes(x=smoking_status , y=age, fill=smoking_status )) + 
+  geom_violin()
+```
+En el gráfico se puede observar la distribución de las personas según su edad y estado de tabaquismo.
+
+se observa que hay bastantes NA pero la mayoría corrresponde ha población joven incluso niños, esto puede ser debido a que es algo a lo que los niños no pueden responder.
+
+También se observa que no hay poblacion que sea niño que se sepa si fuma o no, son todos NA.
+
+Otra cosa a resaltar en que la población que ha fumado alguna vez es población mayo de mas de 60 años mayoritariamente. Debido a esto se puede deber el aumento de proporción de gente que sufre derrames de la categoria fomerly smokes
+
+
+
+## #Stroke vs work type
+
+```{r}
+# Gráfico de barras para 'work_type' según si ha habido un derrame cerebral
+ggplot(train, aes(x = work_type, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Distribución de 'Work Type' según Derrame Cerebral", x = "Tipo de Trabajo", y = "Proporción")
+
+```
+
+En este grafico se relaciona el tipo de trabajo con stroke.
+Se obseerva que en proporción los que trabajan para si mismos y trabajan para el sector privado tienen mas derrames.
+Pero no es nada concluyente ni muy
+
+### Stroke vs Residence type
+
+```{r}
+ggplot(train, aes(x = Residence_type, fill = factor(stroke))) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Residencia (Urbano/Rural)", x = "Tipo de Residencia", y = "Proporción")
+
+```
+Se observa la proporción de gente que tiene un derrame según su residencia rural o urbano. Se ven las dos gráficas muy similares por lo que no es algo que influya en si hay un derrame o no.
+
+
+### Matriz de correlación
+
+```{r}
+
+stroke_data_clean <- datos
+stroke_clean_numeric <- na.omit(datos[sapply(datos, is.numeric)])
+```
+
+```{r}
+stroke_clean_numeric <- na.omit(datos[sapply(datos, is.numeric)])
+cor_matrix <- cor(stroke_clean_numeric)
+corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white", "red"))(200), addCoef.col = "black", tl.col = "black", tl.cex = 0.8, title = "Matriz de correlación")
+```
+
+En el gráfico, se puede observar respecto a la variable objetivo, que los datos con más relevancia son la edad, la hypertensión, si ha tenido ataques al corazon y el nivel de la glucosa.
+
+### PCA para reducción de dimensionalidad
+
+```{r}
+PCA <- prcomp(~bmi + age + avg_glucose_level, data = train, scale = TRUE)
+cat("Matriz de rotación o de pesos W: \n")
+PCA$rotation
+```
+
+```{r}
+plot(PCA)
+summary(PCA)
+biplot(PCA)
+```
