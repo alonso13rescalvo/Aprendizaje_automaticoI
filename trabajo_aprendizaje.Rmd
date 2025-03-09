@@ -1,7 +1,7 @@
 ---
 title: "Análisis de Stroke por Edad"
-author: "Tu Nombre"
-date: "`r Sys.Date()`"
+author: "Alonso Rescalvo Casas, Gabriel Carlos Suárez Chiquito y Marc Gil Arnau. Grupo 2"
+date: "2025-02-16"
 output:  
   html_document:
     toc: true        # Activa el índice (table of contents)
@@ -22,7 +22,7 @@ Según la OMS, los derrames cerebrales son la segunda causa de mortalidad, respo
 Este conjunto de datos permite predecir si es probable que un paciente sufra un accidente cerebrovascular en función de parámetros como el sexo, la edad, diversas enfermedades y el tabaquismo.
 Cada fila de los datos proporciona información relevante sobre el paciente.
 
-### Variables del dataset:
+## Variables del dataset:
 
 1)  id: Identificador único
 2)  gender: "Masculino", "Femenino", "Otros"
@@ -37,7 +37,7 @@ Cada fila de los datos proporciona información relevante sobre el paciente.
 11) smoking_status: "formerly smoked", "never smoked", "smokes", "Unknown"
 12) stroke: 1 si ha sufrido un derrame, 0 si no
 
-### Carga y exploración inicial de los datos
+## Carga y exploración inicial de los datos
 
 ```{r}
 library(readr)
@@ -49,40 +49,9 @@ library(corrplot)
 # Cargamos los datos
 datos <- read.csv("D:/UNI/Regresion/healthcare-dataset-stroke-data.csv", sep=",", header=TRUE)
 
-# Primer vistazzo a los datos
-str(datos)
-head(datos)
-View(datos)
 
+## Partición en train-test-v
 ```
-
-Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
-
-```{r}
-table(datos$bmi)
-```
-
-Vemos que hay 201 valores faltantes pero están como N/A y no como NA, por eso trata la variable como chr.
-
-### Limpieza de datos
-
-Ponemos los datos faltantes que estan como char en verdaderos datos faltantes como NA
-
-```{r}
-# Convertimos los valores "N/A" en NA en bmi
-datos$bmi[datos$bmi == "N/A"] <- NA
-#Convertimos datos faltantes unknown en NA
-datos$smoking_status[datos$smoking_status == "Unknown"]<-NA
-
-#Comprobamos que se ha cambiado correctamente
-table(datos$bmi)
-table(datos$smoking_status)
-View(datos)
-
-```
-
-### Partición en train-test-v
-
 Validation
 
 ```{r}
@@ -118,6 +87,40 @@ dim(train)
 
 Se observa que tiene 3066 observaciones y 12 variables.
 
+```{r}
+# Primer vistazzo a los datos
+str(train)
+head(train)
+View(train)
+
+```
+
+Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
+
+```{r}
+table(train$bmi)
+```
+
+Vemos que hay 201 valores faltantes pero están como N/A y no como NA, por eso trata la variable como chr.
+
+### Limpieza de datos
+
+Ponemos los datos faltantes que estan como char en verdaderos datos faltantes como NA
+
+```{r}
+# Convertimos los valores "N/A" en NA en bmi
+train$bmi[train$bmi == "N/A"] <- NA
+#Convertimos datos faltantes unknown en NA
+train$smoking_status[train$smoking_status == "Unknown"]<-NA
+
+#Comprobamos que se ha cambiado correctamente
+table(train$bmi)
+table(train$smoking_status)
+View(train)
+
+```
+
+
 Vemos el tipo de datos que tenemos en train
 
 ```{r}
@@ -135,6 +138,7 @@ Se observa que hay tres variables continuas que son age, avg_glucose_level y bmi
 Por otro lado las variables residen_type, smoking_status y work_type son de tipo char y tienen que ser factor por lo que las convertimos a tipo factor.
 
 Y tenemos claro que la columna "id" no será relevante en nuestro modelo, después de todo, el ID de una persona registrada no tendrá influencia en el diagnóstico (no tendré un tumor sólo por mi ID).
+
 Por lo tanto, podemos eliminar esta columna de nuestro conjunto de datos, para no influir en la construcción del modelo.
 
 ```{r}
@@ -148,8 +152,10 @@ train$Residence_type <- factor(train$Residence_type)
 train$smoking_status <- factor(train$smoking_status)
 train$work_type <- factor(train$work_type)
 train$stroke <- factor(train$stroke)
-train$avg_glucose_level <- factor(train$avg_glucose_level)
+train$hypertension <- factor(train$hypertension)
 train$heart_disease <- factor(train$heart_disease)
+train$gender <- factor(train$gender)
+
 
 
 
@@ -316,11 +322,12 @@ ggplot(na.omit(train), aes(x = stroke, y = bmi, fill = stroke)) +
 
 En el boxplot se observa lo visto anteriormente, que el bmi no tiene mucha relevancia en cuanto a tener un derrame.
 
+
 ### Stroke vs Glucosa
 
 ```{r}
 # Boxplot para los niveles de glucosa en función de si se sufrió un derrame cerebral
-ggplot(train, aes(x = factor(stroke), y = avg_glucose_level, fill = factor(stroke))) + geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Glucosa Promedio según Derrame Cerebral", x = "Derrame Cerebral", y = "Nivel de Glucosa")
+ggplot(na.omit(train), aes(x = stroke, y = avg_glucose_level, fill = stroke)) + geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Glucosa Promedio según Derrame Cerebral", x = "Derrame Cerebral", y = "Nivel de Glucosa")
 
 ```
 
@@ -328,19 +335,41 @@ Se ha estudiado la relacion entre la glucosa y stroke.
 Se observa que tienen una relacion entre cuanto mas alto tengas el nivel de glucosa mas gente puede llegar a tener un derrame
 
 ```{r}
-
-ggplot(na.omit(train), aes(x = avg_glucose_level, color = stroke)) +
-  geom_density(lwd = 2, linetype = 1) +
+ggplot(train, aes(x = stroke, y = avg_glucose_level, fill = factor(stroke))) +
+  geom_violin(alpha = 0.6) +
   theme_minimal() +
-  labs(title = "Distribución de Nivel de glucosa según densidad de Derrame Cerebral",
-       x = "Nivel de glucosa", y = "Densidad")
+  labs(title = "Distribución del Nivel de Glucosa según Derrame Cerebral",
+       x = "Derrame Cerebral", y = "Nivel de Glucosa",
+       fill = "Derrame Cerebral")
+
+
+
+```
+
+```{r}
+
+ggplot(train, aes(x = avg_glucose_level, color = factor(stroke))) +
+  geom_density(lwd = 2, linetype = 1, na.rm = TRUE) +
+  theme_minimal() +
+  labs(title = "Distribución de Nivel de Glucosa según Densidad de Derrame Cerebral",
+       x = "Nivel de Glucosa", y = "Densidad")
+
 ```
 
 En este gráfico de la Distribución de Nivel de glucosa según la densidad de Derrame Cerebral, se puede observar lo dicho anteriormente que ha cuanto mayor sea el nivel de glucosa mayor sera la probabilidad de que se tenga un derrame.
 
 Las personas sin derrame cerebral tienden a tener niveles de glucosa más concentrados en rangos bajos (80-100)
+```{r}
+ggplot(train, aes(x = age, y = avg_glucose_level, color = factor(stroke))) +
+  geom_point(alpha = 0.6, size = 2) +
+  theme_minimal() +
+  labs(title = "Relación entre Edad y Nivel de Glucosa según Derrame Cerebral",
+       x = "Edad", y = "Nivel de Glucosa",
+       color = "Derrame Cerebral")
 
+```
 
+En este gráfico se corrobora lo mencionado anteriormente a cuanto mas edad, es decir mas a la derecha muchas más proporción de la muestra sufre un derrame. Y a cuanto más glucosa también
 ###Stroke vs Heart disease
 ```{r}
 
@@ -386,7 +415,7 @@ Otra cosa a resaltar en que la población que ha fumado alguna vez es población
 
 
 
-## #Stroke vs work type
+### Stroke vs work type
 
 ```{r}
 # Gráfico de barras para 'work_type' según si ha habido un derrame cerebral
@@ -397,9 +426,28 @@ ggplot(train, aes(x = work_type, fill = factor(stroke))) +
 
 ```
 
-En este grafico se relaciona el tipo de trabajo con stroke.
-Se obseerva que en proporción los que trabajan para si mismos y trabajan para el sector privado tienen mas derrames.
-Pero no es nada concluyente ni muy
+En este gráfico se relaciona el tipo de trabajo con stroke.
+Se observa que en proporción los que trabajan para si mismos y trabajan para el sector privado tienen mas derrames.
+Pero no es nada concluyente, ya que es muy ligero la diferencia.
+
+
+```{r}
+ggplot(train, aes(x = work_type, y = age, fill = work_type)) +
+  geom_boxplot(alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Distribución de Edad según Tipo de Trabajo",
+       x = "Tipo de Trabajo", y = "Edad") +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+En este gráfico se obsrva la relacion entre el tipo trabajo y su edad. Vemos que la población perteneciente a children y nerver_worked son gente joven de menos de 18 años. Debido a esto en la relacion de tipo de trabajo con stroke de esto nos dale muy bajo o nulo la proprcion de stroke.
+
+Por otro lado se observa que los self-employed, son un sector compuesto principalmente por gente de edades altas, debido a esto en el gráfico anterior , la gente perteneciente a self-employed tenia mayor proorción de gente que haya sufrido un derrame.
+
+Por lo que se puede concluir que el tipo de trabajo no influye al si alguien puede ener un derrame, si no que esta mas relacionado con la edad y debido a la edad la categoria self-employed tiene mayor proporción de derrames.
+
+
 
 ### Stroke vs Residence type
 
@@ -412,24 +460,74 @@ ggplot(train, aes(x = Residence_type, fill = factor(stroke))) +
 ```
 Se observa la proporción de gente que tiene un derrame según su residencia rural o urbano. Se ven las dos gráficas muy similares por lo que no es algo que influya en si hay un derrame o no.
 
+## Análisis estadistico
 
-### Matriz de correlación
+### Matriz de correlación de las varibles continuas
 
-```{r}
-
-stroke_data_clean <- datos
-stroke_clean_numeric <- na.omit(datos[sapply(datos, is.numeric)])
-```
+La matriz de correlacion mueestra la correlacion entre las variables age, avg_glucose_level y bmi, que son aquellas variables continuas
 
 ```{r}
-stroke_clean_numeric <- na.omit(datos[sapply(datos, is.numeric)])
-cor_matrix <- cor(stroke_clean_numeric)
+train_numeric <- na.omit(train[sapply(train, is.numeric)])
+cor_matrix <- cor(train_numeric)
 corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white", "red"))(200), addCoef.col = "black", tl.col = "black", tl.cex = 0.8, title = "Matriz de correlación")
 ```
 
-En el gráfico, se puede observar respecto a la variable objetivo, que los datos con más relevancia son la edad, la hypertensión, si ha tenido ataques al corazon y el nivel de la glucosa.
+En la matriz se observa que todas las variables continuas tienen algo de relación pero destaca la relación de edad y bmi, cuanto mas edad tengamos, es más probable de que tengamos un bmi mas alto.
 
-### PCA para reducción de dimensionalidad
+## Calculos estadisticos (media, mediana, desviación...)
+Hacemos summary de train_numeric, para que coja solo las variables que son continuas, ya que de las categoricas no se pueden hacer los análisis.
+
+
+Nos muestras todo los datos incluidos los datos factor 
+```{r}
+# Crear una tabla de frecuencias
+freqs <- table(train$age)
+
+# Obtener la moda (valor más frecuente)
+moda <- as.numeric(names(freqs[which.max(freqs)]))
+
+# Obtener la frecuencia de la moda
+frecuencia <- max(freqs)
+
+# Imprimir resultado
+cat("La moda es:", moda, "y se repite", frecuencia, "veces.\n")
+
+```
+
+
+```{r}
+summary(train_numeric)
+sd(train$age)
+sd(train$avg_glucose_level)
+sd(train$bmi, na.rm = TRUE)
+```
+
+1. Variable age 
+El valor mínimo registrado es 0.08, lo que indica la presencia de un recién nacido en la muestra.
+El primer cuartil se encuentra en 25.00, lo que significa que el 25% de los individuos tiene menos de esa edad. 
+La mediana es de 44.00, indicando que la mitad de la población analizada tiene menos de 44 años.
+La media es de 42.95, lo que muestra una distribución cercana a la mediana. 
+El tercer cuartil es 61.00, lo que significa que el 75% de los individuos tiene menos de esta edad.
+El valor máximo registrado es 82.00 años. La desviación estándar calculada es de 22.79 años.
+
+2. Variable avg_glucose_level (Nivel Promedio de Glucosa)
+El menor nivel de glucosa registrado es de 55.12 mg/dL, mientras que el primer cuartil se encuentra en 77.52 mg/dL, lo que indica que el 25% de las personas presenta niveles de glucosa por debajo de este valor. 
+La mediana es de 91.89 mg/dL, representando el valor central de la distribución. 
+La media es de 105.79 mg/dL, siendo mayor que la mediana, lo que sugiere la existencia de valores altos que podrían estar afectando la distribución. 
+El tercer cuartil se encuentra en 114.46 mg/dL, indicando que el 75% de los individuos tiene valores inferiores a este umbral. 
+El nivel máximo registrado es de 271.74 mg/dL, lo que sugiere la posible presencia de valores atípicos en la muestra, pero comprendidos entre lo posible por lo que son datos reales. Tiene una desviación tipica de 45,20 por lo que hay bastante dispersión
+
+3.l   Valor mínimo registrado en la muestra es de 10.30.
+El primer cuartil es 23.50, lo que indica que el 25% de las personas tiene un IMC menor a este valor. 
+La mediana es de 28.00, lo que refleja una tendencia al sobrepeso en la población analizada según los criterios de la Organización Mundial de la Salud (OMS). 
+La media del IMC es de 28.83, lo que refuerza la tendencia observada en la mediana. 
+El tercer cuartil es 33.02, indicando que el 75% de las personas tiene un IMC por debajo de este valor. 
+El valor máximo registrado es de 97.60, lo cual es un dato anormalmente alto
+pero es algo posble por lo que no podemos eliminarlo de la base de datos. 
+
+
+
+# PCA para reducción de dimensionalidad
 
 ```{r}
 PCA <- prcomp(~bmi + age + avg_glucose_level, data = train, scale = TRUE)
