@@ -15,12 +15,6 @@ df <- continuas_train
 d <- dist(scale(df), method = "euclidean")
 # la distancia euclidiana es una métrica estándar, en teoría ya cumple todas las condiciones.
 
-# Clustering jerárquico usando enlace completo
-hc1 <- hclust(d, method = "complete" )
-#scale normaliza
-# Dendrograma
-plot(hc1, cex = 0.6, hang = -1)
-
 
 #Metodo del codo para saber cuantos cluster hacer
 fviz_nbclust(scale(df), kmeans, method = "wss")
@@ -46,3 +40,26 @@ fviz_cluster(k3_limpio, data = scale(df_limpio))  # Visualizar el nuevo clusteri
 
 
 ```
+Al utilizar la función dist() de R , la matriz de distancias que estamos generando cumple las condiciones para ser una medida de desemejanza
+
+
+### Clustering jerárquico
+```{r}
+# Método de Ward
+hc5 <- hclust(d, method = "ward.D2" )
+
+# Cortamos en 3 clusters
+sub_grp <- cutree(hc5, k = 3)
+
+# Visualizamos el corte en el dendrograma
+plot(hc5, cex = 0.6)
+rect.hclust(hc5, k = 3, border = 2:5)
+
+# Número de observaciones en cada cluster
+table(sub_grp)
+# Visualización
+fviz_cluster(list(data=scale(df),cluster=sub_grp))
+
+
+```
+Como podemos observar en ambos cluster, tanto jerarquico como no jerarquico podemos ver dos datos que parecen outliers , ero la separacion de cluster es muy pareja.
