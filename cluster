@@ -1,0 +1,48 @@
+
+### Aprendizaje no supervisado
+
+```{r}
+
+library(tidyverse)  #  manipilación de datos
+library(cluster)    # algoritmos de clustering 
+library(factoextra) # algoritmos de clustering & visualización
+
+continuas_train <-na.omit(train[, c("age", "hypertension", "bmi")])
+#continuas_train <-na.omit(PC1)
+df <- continuas_train
+# Reproducible
+# Matriz de disimilaridades
+d <- dist(scale(df), method = "euclidean")
+# la distancia euclidiana es una métrica estándar, en teoría ya cumple todas las condiciones.
+
+# Clustering jerárquico usando enlace completo
+hc1 <- hclust(d, method = "complete" )
+#scale normaliza
+# Dendrograma
+plot(hc1, cex = 0.6, hang = -1)
+
+
+#Metodo del codo para saber cuantos cluster hacer
+fviz_nbclust(scale(df), kmeans, method = "wss")
+
+
+#Cluster
+k3 <- kmeans(scale(df), centers = 3, nstart = 20)
+fviz_cluster(k3, data = scale(df))
+
+# Obtener los centroides
+centroides <- k3$centers[k3$cluster, ]
+
+# Calcular distancias euclidianas de cada punto a su centroide
+distancias <- sqrt(rowSums((scale(df) - centroides)^2))
+
+# Ver las distancias más altas (posibles outliers)
+outliers <- order(distancias, decreasing = TRUE)[1:2]  # Tomamos los 2 más alejados
+print(outliers)
+df_limpio <- df[-outliers, ]  # Eliminar filas con outliers
+k3_limpio <- kmeans(scale(df_limpio), centers = 3, nstart = 20)
+fviz_cluster(k3_limpio, data = scale(df_limpio))  # Visualizar el nuevo clustering
+
+
+
+```
