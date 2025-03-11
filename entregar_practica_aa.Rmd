@@ -13,7 +13,6 @@ editor_options:
     wrap: sentence
 ---
 
-
 # Comprensión del problema. Explicación. Lectura de datos. Particiones.
 
 El conjunto de datos sirve para intentar predecir cómo de probable es sufrir un derrame cerebral a partir de unos parámetros.
@@ -50,12 +49,33 @@ library(readr)
 library(cluster)
 library(factoextra)
 
-# Cargamos los datos
 datos <- read.csv("healthcare-dataset-stroke-data.csv", sep=",", header=TRUE)
 
-
-
+summary(datos)
+head(datos)
 ```
+
+```{r}
+str(datos)
+```
+
+Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
+
+```{r}
+table(datos$bmi)
+```
+
+Hay 201 valores faltantes pero están como "N/A" y no como NA, por eso trata la variable como "character".
+
+Vamos a convertir los valores "N/A" a NA y transformar BMI a una variable númerica.
+
+```{r}
+datos$bmi[datos$bmi == "N/A"] <- NA
+datos$bmi <- as.numeric(datos$bmi)
+summary(datos$bmi)
+```
+
+
 ## Partición en train-test-validation
 
 ```{r}
@@ -71,8 +91,6 @@ ntest <- length(indices_restantes) * 0.5
 indices_test <- sample(indices_restantes, ntest, replace = FALSE)
 indices_val <- indices[-c(indices_train, indices_test)]
 
-
-
 train <- datos[indices_train,]
 test <- datos[indices_test,]
 val <- datos[indices_val,]
@@ -83,6 +101,7 @@ dim(test)
 dim(val)
 ```
 
+
 # Preparación de datos y análisis exploratorio de datos.
 
 Ver dimensiones de train
@@ -91,42 +110,12 @@ Ver dimensiones de train
 dim(train)
 ```
 
-Se observa que tiene 3066 observaciones y 12 variables.
+La partición de los datos "train" tiene el 60% de las observaciones totales, es decir 3066 observaciones, y 12 variables.
 
 ```{r}
-# Primer vistazzo a los datos
 str(train)
 head(train)
-View(train)
-
 ```
-
-Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
-
-```{r}
-table(train$bmi)
-```
-
-Vemos que hay 201 valores faltantes pero están como N/A y no como NA, por eso trata la variable como chr.
-
-## Limpieza de datos
-
-Ponemos los datos faltantes que estan como char en verdaderos datos faltantes como NA
-
-```{r}
-# Convertimos los valores "N/A" en NA en bmi
-train$bmi[train$bmi == "N/A"] <- NA
-#Convertimos datos faltantes unknown en NA
-train$smoking_status[train$smoking_status == "Unknown"]<-NA
-
-#Comprobamos que se ha cambiado correctamente
-table(train$bmi)
-table(train$smoking_status)
-View(train)
-
-```
-
-
 Vemos el tipo de datos que tenemos en train
 
 ```{r}
@@ -141,30 +130,24 @@ Variables texto: gender, ever_married, work_type, Residence_type y smoking_statu
 
 Se observa que hay tres variables continuas que son age, avg_glucose_level y bmi que estan en tipo num lo cual es correcto.
 
-Por otro lado las variables residen_type, smoking_status y work_type son de tipo char y tienen que ser factor por lo que las convertimos a tipo factor.
 
-Y tenemos claro que la columna "id" no será relevante en nuestro modelo, después de todo, el ID de una persona registrada no tendrá influencia en el diagnóstico (no tendré un tumor sólo por mi ID).
-
-Por lo tanto, podemos eliminar esta columna de nuestro conjunto de datos, para no influir en la construcción del modelo.
+La columna id no será relevante para el modelo de machine learning, ya que el identificador único de una persona no tiene influencia en el diagnóstico médico. Por lo tanto, eliminaremos esta columna del conjunto de datos para evitar que afecte la construcción del modelo.
 
 ```{r}
-#borramos coluna id 
 train <- train[, -which(names(train) == "id")]
 ```
 
+Las variables de texto (gender, ever_married, work_type, Residence_type y smoking_status) están actualmente en formato "character". Dado que estas variables son categóricas, las convertiremos a tipo factor para facilitar su procesamiento en el modelo.
+
 ```{r}
+train$gender <- factor(train$gender)
 train$ever_married <- factor(train$ever_married)
 train$Residence_type <- factor(train$Residence_type)
 train$smoking_status <- factor(train$smoking_status)
 train$work_type <- factor(train$work_type)
-train$stroke <- factor(train$stroke)
 train$hypertension <- factor(train$hypertension)
 train$heart_disease <- factor(train$heart_disease)
-train$gender <- factor(train$gender)
-
-
-
-
+train$stroke <- factor(train$stroke)
 
 str(train)
 ```
@@ -175,19 +158,13 @@ Se puede observar que ya esta corregido lo que se observo anteriormente y que ya
 
 Ahora vamos a ver gráficos de la distribución y frecuencia de las algunas de las variables.
 
-```{r}
-#Psar bmi a varuable numerica
-train$bmi <- as.numeric(train$bmi)
-str(train$bmi)
-```
-
 Grafico en función del tipo de trabajo
 
 ```{r}
-ggplot(train) + geom_bar(aes(x = work_type))
+ggplot(train) + geom_bar(aes(x = work_type), fill = "skyblue", color = "black") + theme_minimal() + labs(title = "Distribución de Tipos de Trabajo", x = "Tipo de Trabajo", y = "Frecuencia")
 ```
 
-1)  El primer gráfico muestra el numero de personas segun su sector de trabajo(cildren, govt_job, nerver_worked, Private, Self-eemployed) Se puede observar que la gran mayoria de poblacion trabaja en el sector privado y que ua minoria no trabaja. No se observa ninguna anomalia
+El primer gráfico muestra el numero de personas segun su sector de trabajo(cildren, govt_job, nerver_worked, Private, Self-eemployed) Se puede observar que la gran mayoria de poblacion trabaja en el sector privado y que ua minoria no trabaja. No se observa ninguna anomalia
 
 ```{r}
 ggplot(train, aes(x = age)) + geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) + theme_minimal() + labs(title = "Distribución de la Edad", x = "Edad", y = "Frecuencia")
@@ -216,21 +193,37 @@ Para mejorar el modelo, se propone reasignar este individuo a la categoría mayo
 Esto permitirá reducir el ruido causado por categorías con muy pocos datos.
 
 ```{r}
+table(train$gender)
+```
+
+Dado que la categoría 'Other' solo contiene un individuo, mantenerla como una categoría separada podría dificultar el modelado predictivo debido al desequilibrio extremo. Para mejorar el rendimiento del modelo, reasignamos este individuo a la categoría mayoritaria ('Female'). De este modo, se reduce el ruido causado por categorías con un número muy bajo de observaciones, lo que podría beneficiar la precisión del modelo.
+
+```{r}
 # Reasignar la categoría "Other" al género mayoritario ("Female")
 train$gender[train$gender == "Other"] <- "Female"
 # Verificar nuevamente las frecuencias
 table(train$gender)
 ```
 
-Como se obserba la categoria other ha desaparecido y la categoria Female tiene un individuo adicional.
+```{r}
+train$gender[train$gender == "Other"] <- "Female"
+ggplot(train, aes(x = gender)) + geom_bar(fill = "lightblue", color = "black") + theme_minimal() + labs(title = "Distribución del Género", x = "Género", y = "Frecuencia")
+```
 
 ```{r}
 ggplot(train, aes(x = smoking_status)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución del Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Frecuencia")
 ```
 
+Este gráfico muestra la distribución del estado de tabaquismo en los datos. Se observa que una proporción significativa de los registros tiene valores desconocidos. 
+Dado que esta categoría representa una parte considerable de los datos, hemos decidido mantener estos valores tal como están, en lugar de convertirlos en 'NA', ya que podrían contener información relevante que podría influir en el rendimiento del modelo.
+
+
 ```{r}
 ggplot(train, aes(x = stroke)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución de stroke", x = "Stroke", y = "Frecuencia")
 ```
+
+Por último, el gráfico muestra la distribución de la variable objetivo, 'stroke'. Se observa que la gran mayoría de las personas no han sufrido un derrame cerebral, mientras que solo una pequeña proporción presenta este diagnóstico. 
+Este desequilibrio en las clases es relevante y debe ser considerado al momento de construir y evaluar el modelo, ya que puede influir en su rendimiento y en la precisión de las predicciones.
 
 ## Comparar variable objetivo respecto a las distintas variables
 
@@ -813,6 +806,8 @@ Este proyecto nos permitió aplicar conceptos teóricos de aprendizaje automáti
 En conclusión, el análisis realizado ha permitido obtener información valiosa sobre los factores que influyen en la probabilidad de sufrir un derrame cerebral y se ha logrado una comprensión más profunda del conjunto de datos.
 Estos resultados pueden servir como base para desarrollar modelos predictivos que nos ayuden a identificar a las personas con mayor riesgo de sufrir un derrame cerebral, lo que a su vez podría contribuir a la prevención y el tratamiento oportuno de este problema de salud.
 
-Parte de cada uno hecho en el trabajo : Hemos hecho todos un poco de cada parte.
+# Partes de la práctica realizada por cada uno
+
+En nuestro proyecto, todos hemos estado involucrados en cada parte del proceso. Todos hemos hecho una parte del EDA, PCA y clustering, participando y corrigiendo cosas que no nos convencieran del resto.
 
 
