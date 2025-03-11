@@ -1,13 +1,15 @@
 
+
 ### Aprendizaje no supervisado
 
 ```{r}
+
 
 library(tidyverse)  #  manipilación de datos
 library(cluster)    # algoritmos de clustering 
 library(factoextra) # algoritmos de clustering & visualización
 
-continuas_train <-na.omit(train[, c("age", "hypertension", "bmi")])
+continuas_train <-na.omit(train[, c("age","avg_glucose_level", "bmi")])
 #continuas_train <-na.omit(PC1)
 df <- continuas_train
 # Reproducible
@@ -15,12 +17,19 @@ df <- continuas_train
 d <- dist(scale(df), method = "euclidean")
 # la distancia euclidiana es una métrica estándar, en teoría ya cumple todas las condiciones.
 
-
+distancia <- as.matrix(d)
+x <- 2
+y <- 3
+z <- 5
+distancia[x,y] >=0
+all(diag(distancia) == 0)
+distancia[x,y] == distancia[y,x]
+print(distancia[x,z] <= distancia[x,y] + distancia[y,z])
 #Metodo del codo para saber cuantos cluster hacer
 fviz_nbclust(scale(df), kmeans, method = "wss")
 
 
-#Cluster
+#Clustering no jerarquico
 k3 <- kmeans(scale(df), centers = 3, nstart = 20)
 fviz_cluster(k3, data = scale(df))
 
@@ -37,6 +46,11 @@ df_limpio <- df[-outliers, ]  # Eliminar filas con outliers
 k3_limpio <- kmeans(scale(df_limpio), centers = 3, nstart = 20)
 fviz_cluster(k3_limpio, data = scale(df_limpio))  # Visualizar el nuevo clustering
 
+
+#metodo silueta
+fviz_nbclust(df, kmeans, method = "silhouette")
+sil <- silhouette(k3$cluster, dist(df))
+fviz_silhouette(sil)
 
 
 ```
@@ -63,3 +77,4 @@ fviz_cluster(list(data=scale(df),cluster=sub_grp))
 
 ```
 Como podemos observar en ambos cluster, tanto jerarquico como no jerarquico podemos ver dos datos que parecen outliers , ero la separacion de cluster es muy pareja.
+
