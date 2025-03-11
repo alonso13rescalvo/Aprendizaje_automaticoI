@@ -53,6 +53,14 @@ sil <- silhouette(k3$cluster, dist(df))
 fviz_silhouette(sil)
 
 
+
+
+df %>%
+  pivot_longer(cols = -cluster, names_to = "variable", values_to = "valor") %>%
+  ggplot(aes(x = factor(cluster), y = valor, fill = factor(cluster))) +
+  geom_boxplot() +
+  facet_wrap(~ variable, scales = "free") +
+  theme_minimal()
 ```
 Al utilizar la función dist() de R , la matriz de distancias que estamos generando cumple las condiciones para ser una medida de desemejanza
 
