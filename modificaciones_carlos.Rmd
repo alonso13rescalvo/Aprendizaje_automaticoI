@@ -14,7 +14,7 @@ editor_options:
 ---
 
 
-# 1) Comprensión del problema. Explicación. Lectura de datos. Particiones.
+# Comprensión del problema. Explicación. Lectura de datos. Particiones.
 
 El conjunto de datos sirve para intentar predecir cómo de probable es sufrir un derrame cerebral a partir de unos parámetros.
 Los datos han sido extraídos del [repositorio Kaggle predicción derrame cerebral](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset).
@@ -54,9 +54,9 @@ library(factoextra)
 datos <- read.csv("healthcare-dataset-stroke-data.csv", sep=",", header=TRUE)
 
 
-## Partición en train-test-v
+
 ```
-Validation
+## Partición en train-test-validation
 
 ```{r}
 set.seed(10)
@@ -81,7 +81,7 @@ dim(test)
 dim(val)
 ```
 
-# 2) Preparación de datos y análisis exploratorio de datos.
+# Preparación de datos y análisis exploratorio de datos.
 
 Ver dimensiones de train
 
@@ -89,7 +89,7 @@ Ver dimensiones de train
 dim(train)
 ```
 
-Se observa que tiene 3066 observaciones y 12 variables.
+Se observa que tiene **3066** observaciones y **12** variables.
 
 ```{r}
 # Primer vistazzo a los datos
@@ -146,7 +146,7 @@ Y tenemos claro que la columna "id" no será relevante en nuestro modelo, despu�
 Por lo tanto, podemos eliminar esta columna de nuestro conjunto de datos, para no influir en la construcción del modelo.
 
 ```{r}
-#borramos coluna id 
+#borramos columna id 
 train <- train[, -which(names(train) == "id")]
 ```
 
