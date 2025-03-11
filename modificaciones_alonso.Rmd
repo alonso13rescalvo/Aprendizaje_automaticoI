@@ -1,0 +1,570 @@
+---
+title: "Práctica Aprendizaje Automático"
+author: "Alonso Rescalvo Casas, Gabriel Carlos Suárez Chiquito y Marc Gil Arnau. Grupo 2"
+date: "2025-02-16"
+output:
+   html_document:
+    toc: true        # Activa el índice (table of contents)
+    toc_float: true  # Hace que el índice sea flotante en HTML
+    number_sections: true # Numera los títulos
+    theme: cerulean  # Tema visual
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+
+# Comprensión del problema. Explicación. Lectura de datos. Particiones.
+
+El conjunto de datos sirve para intentar predecir cómo de probable es sufrir un derrame cerebral a partir de unos parámetros.
+Los datos han sido extraídos del [repositorio Kaggle predicción derrame cerebral](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset).
+Según la OMS, los derrames cerebrales son la segunda causa de mortalidad, responsables de aproximadamente el 11% de las muertes en el mundo.
+
+Este conjunto de datos permite predecir si es probable que un paciente sufra un accidente cerebrovascular en función de parámetros como el sexo, la edad, diversas enfermedades y el tabaquismo.
+Cada fila de los datos proporciona información relevante sobre el paciente.
+
+## Variables del dataset:
+
+1)  id: Identificador único
+2)  gender: "Masculino", "Femenino", "Otros"
+3)  age: Edad del paciente en años
+4)  hypertension: 0 si no tiene hipertensión, 1 si tiene hipertensión
+5)  heart_disease: 0 si no tiene enfermedades cardíacas, 1 si tiene
+6)  ever_married: "No" o "Yes"
+7)  work_type: "children", "Govt_job", "Never_worked", "Private", "Self-employed"
+8)  Residence_type: "Rural" o "Urban"
+9)  avg_glucose_level: Media de glucosa en sangre
+10) bmi: Índice de masa corporal (IMC)
+11) smoking_status: "formerly smoked", "never smoked", "smokes", "Unknown"
+12) stroke: 1 si ha sufrido un derrame, 0 si no
+
+## Carga y exploración inicial de los datos
+
+```{r}
+library(readr)
+library(dplyr)
+library(caret)
+library(ggplot2)
+library(corrplot)
+library(cluster)
+library(factoextra)
+
+datos <- read_csv("~/Escritorio/2carrera/segundo_cuatri/aprendizaje_automatico/archive/healthcare-dataset-stroke-data.csv")
+
+
+summary(datos)
+head(datos)
+```
+
+```{r}
+str(datos)
+```
+
+Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
+
+```{r}
+table(datos$bmi)
+```
+
+Hay 201 valores faltantes pero están como "N/A" y no como NA, por eso trata la variable como "character".
+
+Vamos a convertir los valores "N/A" a NA y transformar BMI a una variable númerica.
+
+```{r}
+datos$bmi[datos$bmi == "N/A"] <- NA
+datos$bmi <- as.numeric(datos$bmi)
+summary(datos$bmi)
+```
+
+## Partición en train-test-validation
+
+```{r}
+set.seed(10)
+
+ntotal <- dim(datos)[1]
+indices <- 1:ntotal
+ntrain <- ntotal * 0.6
+indices_train <- sample(indices, ntrain, replace = FALSE)
+
+indices_restantes <- indices[-indices_train]
+ntest <- length(indices_restantes) * 0.5
+indices_test <- sample(indices_restantes, ntest, replace = FALSE)
+indices_val <- indices[-c(indices_train, indices_test)]
+
+train <- datos[indices_train,]
+test <- datos[indices_test,]
+val <- datos[indices_val,]
+
+
+dim(train)
+dim(test)
+dim(val)
+```
+
+# Preparación de datos y análisis exploratorio de datos.
+
+```{r}
+dim(train)
+```
+
+La partición de los datos "train" tiene el 60% de las observaciones totales, es decir 3066 observaciones, y 12 variables.
+
+Vemos el tipo de datos que tenemos en cada variable:
+
+```{r}
+str(train)
+```
+
+Variables discretas: id, hypertension, heart_disease y stroke.
+
+Variables continuas: age, avg_glucose_level y bmi.
+
+Variables texto: gender, ever_married, work_type, Residence_type y smoking_status.
+
+La columna id no será relevante para el modelo de machine learning, ya que el identificador único de una persona no tiene influencia en el diagnóstico médico.
+Por lo tanto, eliminaremos esta columna del conjunto de datos para evitar que afecte la construcción del modelo.
+
+```{r}
+train <- train[, -which(names(train) == "id")]
+```
+
+Las variables de texto (gender, ever_married, work_type, Residence_type y smoking_status) están actualmente en formato "character".
+Dado que estas variables son categóricas, las convertiremos a tipo factor para facilitar su procesamiento en el modelo.
+
+```{r}
+train$gender <- factor(train$gender)
+train$ever_married <- factor(train$ever_married)
+train$Residence_type <- factor(train$Residence_type)
+train$smoking_status <- factor(train$smoking_status)
+train$work_type <- factor(train$work_type)
+train$hypertension <- factor(train$hypertension)
+train$heart_disease <- factor(train$heart_disease)
+train$stroke <- factor(train$stroke)
+
+str(train)
+```
+
+## Gráficos de distribucion de las variables
+
+Ahora vamos a ver gráficos de la distribución y frecuencia de las algunas de las variables.
+
+```{r}
+ggplot(train) + geom_bar(aes(x = work_type), fill = "skyblue", color = "black") + theme_minimal() + labs(title = "Distribución de Tipos de Trabajo", x = "Tipo de Trabajo", y = "Frecuencia")
+```
+
+El gráfico muestra la distribución del número de personas según su sector de trabajo.
+Se destaca que la mayoría de la población trabaja en el sector privado, mientras que una minoría no está empleada.
+
+```{r}
+ggplot(train, aes(x = age)) + geom_histogram(binwidth = 5, fill = "blue", color = "black", alpha = 0.7) + theme_minimal() + labs(title = "Distribución de la Edad", x = "Edad", y = "Frecuencia")
+```
+
+El histograma muestra la distribución de edades en la población estudiada.
+Se observa que la frecuencia aumenta conforme avanza el rango de edad hasta llegar aproximadamente a los 55-60 años.
+A partir de ese punto, la frecuencia disminuye ligeramente, con la excepción de un repunte en torno a los 80 años.
+
+```{r}
+ggplot(train, aes(x = gender)) + geom_bar(fill = "lightblue", color = "black") + theme_minimal() + labs(title = "Distribución del Género", x = "Género", y = "Frecuencia")
+```
+
+El histograma muestra la distribución de género en la muestra estudiada.
+Se observa que hay una mayor cantidad de mujeres ('Female') que hombres ('Male') en el conjunto de datos, con una diferencia considerable en las frecuencias.
+Además, aparece una categoría 'Other', que representa una minoría muy reducida en comparación con las otras dos categorías.
+
+```{r}
+table(train$gender)
+```
+
+Dado que la categoría 'Other' solo contiene un individuo, mantenerla como una categoría separada podría dificultar el modelado predictivo debido al desequilibrio extremo.
+Para mejorar el rendimiento del modelo, reasignamos este individuo a la categoría mayoritaria ('Female').
+De este modo, se reduce el ruido causado por categorías con un número muy bajo de observaciones, lo que podría beneficiar la precisión del modelo.
+
+```{r}
+train$gender[train$gender == "Other"] <- "Female"
+ggplot(train, aes(x = gender)) + geom_bar(fill = "lightblue", color = "black") + theme_minimal() + labs(title = "Distribución del Género", x = "Género", y = "Frecuencia")
+```
+
+```{r}
+ggplot(train, aes(x = smoking_status)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución del Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Frecuencia")
+```
+
+Este gráfico muestra la distribución del estado de tabaquismo en los datos.
+Se observa que una proporción significativa de los registros tiene valores desconocidos.
+Dado que esta categoría representa una parte considerable de los datos, hemos decidido mantener estos valores tal como están, en lugar de convertirlos en 'NA', ya que podrían contener información relevante que podría influir en el rendimiento del modelo.
+
+```{r}
+ggplot(train, aes(x = stroke)) + geom_bar(fill = "lightgreen", color = "black") + theme_minimal() + labs(title = "Distribución de stroke", x = "Stroke", y = "Frecuencia")
+```
+
+Por último, el gráfico muestra la distribución de la variable objetivo, 'stroke'.
+Se observa que la gran mayoría de las personas no han sufrido un derrame cerebral, mientras que solo una pequeña proporción presenta este diagnóstico.
+Este desequilibrio en las clases es relevante y debe ser considerado al momento de construir y evaluar el modelo, ya que puede influir en su rendimiento y en la precisión de las predicciones.
+
+## Comparar variable objetivo respecto a las distintas variables
+
+```{r}
+stroke_clean_numeric <- na.omit(train[sapply(train, is.numeric)])
+cor_matrix <- cor(stroke_clean_numeric)
+corrplot(cor_matrix, method = "color", col = colorRampPalette(c("blue", "white", "red"))(200), addCoef.col = "black", tl.col = "black", tl.cex = 0.8, title = "Matriz de correlación")
+```
+
+```{r}
+ggplot(train, aes(x = age, color = stroke)) + geom_density(lwd = 2, linetype = 1) + theme_minimal() + labs(title = "Distribución de la Edad según Derrame Cerebral", x = "Edad Logarítmica", y = "Densidad")
+```
+
+```{r}
+ggplot(train, aes(x = stroke, y = age, fill = stroke)) +
+  geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Edad según Derrame Cerebral", x = "Derrame Cerebral", y = "Edad")
+```
+
+Se estudia más en detalle la relación entre la edad y el derrame cerebral.
+Se puede observar, que existe una relación positiva, las personas de mayor edad tienen una mayor probabilidad de sufrir un derrame en comparación con las más jóvenes.
+Existen algunos casos aislados, como un bebé (edad cercana a 0) y un joven (menor a 40 años).
+Tras investigar, se concluye que es poco probable que un bebé sufra un derrame, aunque no es imposible.
+Sin embargo, estos casos representan valores atípicos dentro de la distribución, ya que la proporción de derrames aumenta con la edad.
+
+```{r}
+ggplot(train, aes(x = stroke, y = avg_glucose_level, fill = stroke)) + geom_boxplot() + theme_minimal() + labs(title = "Distribución de la Glucosa Promedio según Derrame Cerebral", x = "Derrame Cerebral", y = "Nivel de Glucosa")
+```
+
+Se analiza la relación entre los niveles de glucosa y la incidencia de derrames cerebrales.
+A partir del boxplot, se puede observar que, en general, los niveles más altos de glucosa están asociados con una mayor probabilidad de sufrir un derrame cerebral.
+Esto sugiere que a medida que los niveles de glucosa aumentan, también lo hace el riesgo de sufrir un accidente cerebrovascular.
+
+```{r}
+ggplot(train, aes(x = work_type, fill = stroke)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Distribución de 'Work Type' según Derrame Cerebral", x = "Tipo de Trabajo", y = "Proporción")
+```
+
+En este gráfico de barras se analiza la relación entre el tipo de trabajo y la incidencia de derrames cerebrales.
+Se observa que, en proporción, las personas que trabajan por cuenta propia y aquellas que trabajan en el sector privado parecen tener una mayor frecuencia de derrames cerebrales.
+Sin embargo, los resultados no son concluyentes y no muestran una tendencia claramente significativa.
+
+```{r}
+ggplot(train, aes(x = smoking_status, fill = stroke)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Estado de Tabaquismo", x = "Estado de Tabaquismo", y = "Proporción")
+```
+
+El gráfico muestra que el tabaquismo no parece tener una relación clara con la incidencia de derrames cerebrales.
+Aunque se distinga entre personas que fuman, las que han dejado de fumar y aquellas que nunca han fumado, la probabilidad de sufrir un derrame cerebral parece ser bastante similar en todos los casos
+
+```{r}
+ggplot(train, aes(x = heart_disease, fill = stroke)) + geom_bar(position = "fill") + theme_minimal() + labs(title = "Proporción de Derrames Cerebrales según probkemas del corazón", x = "Problemas Cardíacos", y = "Proporción")
+```
+
+Este gráfico de barras muestra la proporción de personas que han sufrido un derrame cerebral en relación con la presencia de problemas cardíacos.
+Se observa que la proporción de personas con derrame cerebral es significativamente mayor en el grupo con problemas cardíacos, lo que sugiere que aquellos que han experimentado trastornos del corazón tienen una mayor probabilidad de sufrir un derrame cerebral.
+
+```{r}
+ggplot(train, aes(x = Residence_type, fill = stroke)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(title = "Proporción de Derrames Cerebrales según Residencia (Urbano/Rural)", x = "Tipo de Residencia", y = "Proporción")
+```
+
+El gráfico muestra que no hay una relación clara entre el tipo de residencia y la incidencia de derrames cerebrales.
+Aunque las personas vivan en áreas urbanas o rurales, la probabilidad de sufrir un derrame cerebral parece ser bastante similar en ambos casos.
+
+```{r}
+ggplot(na.omit(train), aes(x = bmi, color = stroke)) + geom_density(lwd = 2, linetype = 1) + theme_minimal() + labs(title = "Distribución de BMI según densidad de Derrame Cerebral", x = "BMI", y = "Densidad")
+```
+
+```{r}
+ggplot(train, aes(x = stroke, y = bmi, fill = stroke)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribución del BMI según Derrame Cerebral", x = "Derrame Cerebral", y = "Índice de Masa Corporal (BMI)") +
+  scale_fill_manual(values = c("lightblue", "lightcoral"))
+```
+
+El boxplot y la distribución muestran que no parece haber una relación clara entre el índice de masa corporal y la incidencia de derrames cerebrales.
+Aunque algunas personas con un BMI más alto pueden tener un mayor riesgo, la diferencia entre tener un BMI bajo o alto no es muy pronunciada en cuanto a la probabilidad de sufrir un derrame cerebral.
+
+# PCA para reducción de dimensionalidad
+
+## PCA con prcomp
+
+```{r}
+PCA <- prcomp(~bmi + age + avg_glucose_level, data = train, scale =TRUE)
+plot(PCA)
+```
+
+```{r}
+summary(PCA)
+```
+
+Podemos comprobar como la primera componente principal es la más relevante, ya que captura el 50.83% de la varianza total de los datos.
+Esto significa que PC1 representa la dirección en la que los datos varían más.
+La segunda componente principal, aunque captura menos varianza, 27.58%, sigue siendo significativa, ya que representa la segunda dirección de máxima varianza en los datos.
+Finalmente, la tercera componente principal explica el 21.58% de la varianza restante, y aunque sigue siendo relevante, como la primera y segunda componente cubren aproximadamente al 80% de la varianza de los datos, trabajaremos con estas dos.
+
+```{r}
+cat("\nMatriz de rotación o de pesos W: \n")
+PCA$rotation
+```
+
+En la matriz de pesos se muestran valores que indican la correlacón entre las variables originales y los componentes prinicpales.
+
+PC1 está influenciado por todas las variables, con correlaciones negativas para BMI, age y avg_glucose_level.
+A medida que estas variables aumentan, el valor de PC1 disminuye, entonces PC1 captura la variabilidad asociada a estas tres variables.
+PC2 está principalmente influenciado por el avg_glucose_level, con una correlación negativa, lo que implica que un mayor nivel de glucosa está relacionado con un menor valor de PC2.
+En menor medida, PC2 también está influenciado por el BMI, con una correlación positiva.
+Enotnces PC2 captura la variabilidad que está relacionada tanto por el nivel de glucosa como por el índice de masa corporal, organizando a las personas principalmente según estas dos variables.
+PC3 está fuertemente influenciado por la edad, con una correlación positiva, lo que indica que un mayor valor en PC3 está asociado con una mayor edad.
+Además, PC3 tiene una correlación negativa con el BMI, lo que sugiere que PC3 captura la variabilidad relacionada con la edad y el índice de masa corporal.
+
+En resumen, PC1 está influenciado por todas las variables de manera negativa, PC2 destaca el nivel de glucosa y el BMI, y PC3 está más enfocado en la edad y el BMI.
+
+## PCA sin usar una funcón definida para obtenerlas componentes principales
+
+Seleccionar solo las variables continuas y estandarizarlas:
+
+```{r}
+datos_cont <- train[, c("bmi", "age", "avg_glucose_level")]
+datos_cont <- na.omit(datos_cont)  
+datos_estandarizados <- scale(datos_cont)
+```
+
+Calcular la matriz de covarianza:
+
+```{r}
+matriz_cov <- cov(datos_estandarizados)
+```
+
+Obtener los autovalores y autovectores, y ordenarlos de mayor a menor:
+
+```{r}
+eig <- eigen(matriz_cov)
+autovalores <- eig$values
+autovectores <- eig$vectors
+orden <- order(autovalores, decreasing = TRUE)  # Indices para ordenar 
+autovalores <- autovalores[orden]  # Reordenar autovalores
+autovectores <- autovectores[ ,orden]  # Reordenar autovectores
+
+autovectores
+```
+
+Los autovectores obtenidos son los mismos que la matriz de pesos ob tenida con prcomp() pero multiplicados por -1.
+Esto no cambia su interpretación, solo la dirección a la que apuntan las componentes principales.
+
+Transformar los datos al nuevo espacio de componentes principales:
+
+```{r}
+PCA_manual <- as.matrix(datos_estandarizados) %*% autovectores  
+```
+
+Calcular la varianza por cada componente principal
+
+```{r}
+varianza_explicada <- autovalores / sum(autovalores)
+varianza_explicada
+```
+
+La varianza coincide con la calculada con prcomp().
+
+Vamos a comparar PC1 a PC2
+
+```{r}
+plot(PCA$x[,1:2],pch=19)
+```
+
+```{r}
+biplot(PCA)
+```
+
+El eje X representa la primera componente principal y el eje Y la segunda.
+Como se ha mencionado en la matriz de pesos, a mayor valor de las variables, menor valor de PC1.
+Por lo tanto, cuanto más a la izquierda estén los puntos, mayor será su nivel de glucosa medio, BMI y edad.
+Y más a la derecha, menor será el valor de estas variables.
+PC2 está principalmente influenciado por el nivel de glucosa medio, con una correlación negativa.
+Esto se representa en el mapa como a mayor altura de los puntos, menor nivel de glucosa.
+Además, PC2 también está influenciado por el BMI, con una correlación positiva, por lo tanto, a mayor altura en el mapa, mayor nivel de BMI.
+En el mapa destacan dos puntos en la parte superior izquierda.
+Esto indica que estas observaciones tienen valores altos en todas las variables especialmente en bmi, pero su nivel de glucosa no es tan alto en comparación con las otras dos variables al estar en una zona más alta.
+
+# Aprendizaje no supervisado
+
+Lo primero que debemos tener en cuenta para el aprendizaje no supervisado es la elección de la métrica que vamos a utilizar.
+Dado que hemos aplicado PCA sobre las variables continuas, trabajaremos con los componentes principales, que son numéricos.
+En este caso, utilizaremos la distancia euclidia.
+
+```{r}
+pca_data <- PCA$x[, 1:2]
+dist_euclidia <- dist(pca_data, method = "euclidean")
+```
+
+La distancia euclidia debe cumplir con las siguientes propiedades para ser considerada una métrica o medida de desemejanza.
+
+La primera métrica que debe de cumplir es la coincidencia: $(\delta(x,y)=0\leftrightarrow x=y)$.
+
+```{r}
+obs1 <- pca_data[1, ]
+obs2 <- obs1
+
+# Calcular la distancia euclidia 
+coincidencia <- dist(rbind(obs1, obs2), method = "euclidean")
+coincidencia
+```
+
+Da 0, por lo tanto cumple la coincidencia
+
+La segunda es no negatividad: $(\delta(x,y)\geq0)$.
+
+```{r}
+obs2 <- pca_data[2, ]
+
+no_neg <- dist(rbind(obs1, obs2), method = "euclidean")
+no_neg
+```
+
+Da mayor que 0, por lo que cumple la no negatividad.
+
+La tercera es simetría $(\delta(x,y)=\delta(y,x))$.
+
+```{r}
+sim_xy <- dist(rbind(obs1, obs2), method = "euclidean")
+sim_yx <- dist(rbind(obs2, obs1), method = "euclidean")
+sim_xy -sim_yx
+```
+
+Al dar la resta 0 las dos tiene el mismo valor, cumple la simetría.
+
+Con esto hemos comprobado que es una medida de desemejanza, pero si ademas verifica la desigualdad triangular $(\delta(x,y)\leq\delta(x,z)+\delta(y,z))$ se tratará de una distancia.
+
+```{r}
+obs3 <- pca_data[3, ]
+
+dt_xy <- dist(rbind(obs1, obs2), method = "euclidean")
+dt_xz <- dist(rbind(obs1, obs3), method = "euclidean")
+dt_yz <- dist(rbind(obs2, obs3), method = "euclidean")
+dt_xz + dt_yz - dt_xy
+```
+
+Al dar mayor o igual que 0 comprobamos la desigualdad, hemos comprobado que la distancia euclidia cumple con la desigualdad triangular.
+Al cumplir con las propiedades de una medida de desemejanza y, además, verifica la desigualdad triangular, por lo que se trata de una distancia
+
+## Clustering no jerárquico
+
+```{r}
+fviz_nbclust(pca_data, kmeans, method = "wss") + labs(title = "Método del Codo")
+```
+
+Para saber el valor que le tenemos de asignar a k usamos el método del codo, en este caso parece que 3 es una buena elección para el número óptimo de clusters.Debido a que la recta tiende a ser continua a partir del 3.
+
+```{r}
+k3 <- kmeans(pca_data, centers = 3, nstart = 20)
+fviz_cluster(k3, data = pca_data, geom = "point")
+```
+
+Como podemos observar en este cluster , se separan ,muy claramente en 3 , aunque podemos apreciar un par de datos que pueden ser outliers en el cluster 3.
+
+```{r}
+# Obtener los centroides
+centroides <- k3$centers[k3$cluster, ]
+
+# Calcular distancias euclidianas de cada punto a su centroide
+distancias <- sqrt(rowSums((pca_data - centroides)^2))
+
+# Ver las distancias más altas (posibles outliers)
+outliers <- order(distancias, decreasing = TRUE)[1:2]  # Tomamos los 2 más alejados
+print(outliers)
+pca_limpio <- pca_data[-outliers, ]  # Eliminar filas con outliers
+k3_limpio <- kmeans(scale(pca_limpio), centers = 3, nstart = 20)
+fviz_cluster(k3_limpio, data = scale(pca_limpio))  # Visualizar el nuevo clustering
+```
+
+Tras eliminar los outliers los clusters se ven más definidos y compactos.
+Observamos una mejor separación entre los tres grupos, lo que indica que la eliminación de outliers nos ha ayudado a mejorar la estructura del clustering.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# Convertir pca_limpio a un dataframe potwue es una matriz
+df_clusterizado <- as.data.frame(pca_limpio)
+
+# Agregar la columna de cluster como factor
+df_clusterizado$cluster <- as.factor(k3_limpio$cluster)
+
+# Transformar el dataset a formato largo para ggplot
+df_long <- df_clusterizado %>%
+  pivot_longer(cols = -cluster, names_to = "variable", values_to = "valor")
+
+# Graficar boxplots para cada variable según el cluster
+ggplot(df_long, aes(x = cluster, y = valor, fill = cluster)) +
+  geom_boxplot(alpha = 0.7) +
+  facet_wrap(~ variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribución de Variables por Cluster", x = "Cluster", y = "Valor")
+
+```
+
+Observando el siguiente boxplot que representa la distribución de cada variable por cluster.
+PC1 parece ser la variable más representativa para separar los clusters, ya que el Cluster 2 y el Cluster 3 están bien diferenciados a lo largo de esta componente.
+PC2 tiene una menor capacidad de diferenciación, aunque sigue mostrando cierta separación, especialmente entre Cluster 1 y Cluster 3.
+Posibles outliers en PC2 (Cluster 3): Se observan algunos valores atípicos (puntos negros) en PC2, especialmente en Cluster 3,como hemos mencionado anteriormente.
+
+```{r}
+#metodo silueta
+fviz_nbclust(pca_data, kmeans, method = "silhouette")
+sil <- silhouette(k3$cluster, dist(pca_data))
+fviz_silhouette(sil)
+
+```
+
+El gráfico de análisis de silueta evalúa la calidad del clustering.
+A partir del cual podemos sacar algunas conclusiones,el valor promedio de la silueta (0.47).Un valor cercano a 1 indica que los clusters están bien separados.Un valor cercano a 0 sugiere que los puntos están en el límite entre clusters.En nuestro caso, 0.47 indica una separación moderada, pero puede haber cierta superposición.
+Distribución de los clusters: -El cluster  (3) tiene la mayoría de los datos y una buena cohesión, aunque algunos puntos tienen baja silueta.
+-El cluster  (2) es más pequeño y está mejor definido.
+-El cluster  (1) tiene una forma más dispersa y algunos valores cercanos a 0, lo que indica que algunos puntos pueden estar mal asignados.Y pueden deberse a los outliers que hemos mencionado antes
+
+El clustering es aceptable, pero podría mejorarse para lograr una mejor separación de los grupos.
+
+## Clustering jerárquico
+
+```{r}
+# Método de Ward
+hc5 <- hclust(dist_euclidia, method = "ward.D2" )
+
+# Cortamos en 3 clusters
+sub_grp <- cutree(hc5, k = 3)
+
+# Visualizamos el corte
+plot(hc5, cex = 0.6)
+rect.hclust(hc5, k = 3, border = 2:5)
+
+# Número de observaciones en cada cluster
+table(sub_grp)
+# Visualización
+fviz_cluster(list(data=pca_data,cluster=sub_grp))
+
+
+```
+
+Hemos generado un dendograma mediante el método de Ward para así ver las distancias y saber en cuantos grupos dividir nuestros datos , y nuestra eleccón ha sido 3 al igual que en los no jerárquicos. Los cluster 2 y 3 se ven modificados respectos a los no jerarquicos y como hemos comprobado con el método de la silueta , no son perfectos y se pueden mejorar las diferentes agrupaciones.
+
+# Conclusión
+
+El objetivo de este análisis fue aplicar técnicas de aprendizaje automático para analizar los factores que pueden influir en la probabilidad de sufrir un derrame cerebral, utilizando un conjunto de datos disponible en Kaggle, que incluye diversas variables de salud de los pacientes.
+El desarrollo incluye la comprensión del problema, la preparación y exploración de los datos, la reducción de dimensionalidad mediante análisis de componentes principales, y la aplicación de técnicas de clustering no supervisado.
+El conjunto de datos nos ha proporcionado información valiosa sobre pacientes y sus características de salud, lo que nos permitió identificar variables clave.
+
+A través del análisis exploratorio de datos, identificamos relaciones significativas entre la variable objetivo y el resto de variables, como la relación entre la edad y la probabilidad de sufrir un derrame cerebral, así como la influencia de factores como los problemas cardíacos y los niveles de glucosa.
+También observamos que algunas variables, como el tipo de residencia o el estado de tabaquismo, no mostraban una relación clara con la variable objetivo, por lo que no las hemos considerado relevantes para la predicción.
+
+Utilizamos PCA para reducir la dimensionalidad de las variables continuas, lo que nos ha permitido capturar la mayor parte de la varianza con dos componentes principales.
+Esto simplificó el análisis posterior y facilitó la visualización de los datos en un espacio de menor dimensión.
+
+En la fase de aprendizaje no supervisado, aplicamos técnicas de clustering, tanto jerárquicas como no jerárquicas, para identificar grupos en los datos.
+Utilizamos la distancia euclidia como métrica, verificando que cumplía con las propiedades necesarias para ser considerada una medida de desemejanza válida.
+El método del codo nos ayudó a determinar el número óptimo de clusters, y los resultados mostraron una agrupación de los datos en función de las características de los pacientes.
+También hemos creado un boxplot para así saber acerca de que variables pertenecen cada cluster y hemos conseguido comprender que variables logran tener más importancia para así diferenciarse de las demás . En nuestro caso hemos usado variables del PCA porque son las más relevantes.
+Para comprobar como de bien quedan separados los cluster hemos utilizado el método de la silueta, el cual nos ha ayudado a ver que nuestros clusters calculados están bien pero podrían ser mejorados.
+Este proyecto nos permitió aplicar conceptos teóricos de aprendizaje automático a un problema real, destacando la importancia de la preparación de datos y el análisis exploratorio como pasos fundamentales antes de la modelización que nos facilitaron trabajar a posteriori con los datos.
+
+En conclusión, el análisis realizado ha permitido obtener información valiosa sobre los factores que influyen en la probabilidad de sufrir un derrame cerebral y se ha logrado una comprensión más profunda del conjunto de datos.
+Estos resultados pueden servir como base para desarrollar modelos predictivos que nos ayuden a identificar a las personas con mayor riesgo de sufrir un derrame cerebral, lo que a su vez podría contribuir a la prevención y el tratamiento oportuno de este problema de salud.
