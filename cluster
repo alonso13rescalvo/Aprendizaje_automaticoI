@@ -53,6 +53,7 @@ sil <- silhouette(k3$cluster, dist(df))
 fviz_silhouette(sil)
 
 
+df$cluster <- k3$cluster
 
 
 df %>%
