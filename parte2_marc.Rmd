@@ -1,0 +1,350 @@
+---
+title: "Práctica Aprendizaje Automático"
+author: "Alonso Rescalvo Casas, Gabriel Carlos Suárez Chiquito y Marc Gil Arnau. Grupo 2"
+date: "2025-02-16"
+output:
+   html_document:
+    toc: true        # Activa el índice (table of contents)
+    toc_float: true  # Hace que el índice sea flotante en HTML
+    number_sections: true # Numera los títulos
+    theme: cerulean  # Tema visual
+editor_options: 
+  markdown: 
+    wrap: sentence
+---
+# Comprensión del problema. Explicación. Lectura de datos. Particiones.
+
+El conjunto de datos sirve para intentar predecir cómo de probable es sufrir un derrame cerebral a partir de unos parámetros.
+Los datos han sido extraídos del [repositorio Kaggle predicción derrame cerebral](https://www.kaggle.com/datasets/fedesoriano/stroke-prediction-dataset).
+Según la OMS, los derrames cerebrales son la segunda causa de mortalidad, responsables de aproximadamente el 11% de las muertes en el mundo.
+
+Este conjunto de datos permite predecir si es probable que un paciente sufra un accidente cerebrovascular en función de parámetros como el sexo, la edad, diversas enfermedades y el tabaquismo.
+Cada fila de los datos proporciona información relevante sobre el paciente.
+
+## Variables del dataset:
+
+1)  id: Identificador único
+2)  gender: "Masculino", "Femenino", "Otros"
+3)  age: Edad del paciente en años
+4)  hypertension: 0 si no tiene hipertensión, 1 si tiene hipertensión
+5)  heart_disease: 0 si no tiene enfermedades cardíacas, 1 si tiene
+6)  ever_married: "No" o "Yes"
+7)  work_type: "children", "Govt_job", "Never_worked", "Private", "Self-employed"
+8)  Residence_type: "Rural" o "Urban"
+9)  avg_glucose_level: Media de glucosa en sangre
+10) bmi: Índice de masa corporal (IMC)
+11) smoking_status: "formerly smoked", "never smoked", "smokes", "Unknown"
+12) stroke: 1 si ha sufrido un derrame, 0 si no
+
+## Carga y exploración inicial de los datos
+
+```{r}
+library(readr)
+library(dplyr)
+library(caret)
+library(ggplot2)
+library(corrplot)
+library(readr)
+library(cluster)
+library(factoextra)
+
+datos <- read.csv("healthcare-dataset-stroke-data.csv", sep=",", header=TRUE)
+
+summary(datos)
+head(datos)
+```
+
+```{r}
+str(datos)
+```
+
+Podemos ver como hemos importado el bmi como 'character' y esto no tiene sentido ya que debería de tratarse de una variable continua.
+
+```{r}
+table(datos$bmi)
+```
+
+Hay 201 valores faltantes pero están como "N/A" y no como NA, por eso trata la variable como "character".
+
+Vamos a convertir los valores "N/A" a NA y transformar BMI a una variable númerica.
+
+```{r}
+datos$bmi[datos$bmi == "N/A"] <- NA
+datos$bmi <- as.numeric(datos$bmi)
+summary(datos$bmi)
+```
+
+
+## Partición en train-test-validation
+
+```{r}
+set.seed(10)
+
+ntotal <- dim(datos)[1]
+indices <- 1:ntotal
+ntrain <- ntotal * 0.6
+indices_train <- sample(indices, ntrain, replace = FALSE)
+
+indices_restantes <- indices[-indices_train]
+ntest <- length(indices_restantes) * 0.5
+indices_test <- sample(indices_restantes, ntest, replace = FALSE)
+indices_val <- indices[-c(indices_train, indices_test)]
+
+train <- datos[indices_train,]
+test <- datos[indices_test,]
+val <- datos[indices_val,]
+
+# Comprobamos la partición
+dim(train)
+dim(test)
+dim(val)
+```
+
+
+# Preparación de datos y análisis exploratorio de datos.
+
+Ver dimensiones de train
+
+```{r}
+dim(train)
+```
+
+La partición de los datos "train" tiene el 60% de las observaciones totales, es decir 3066 observaciones, y 12 variables.
+
+```{r}
+str(train)
+head(train)
+```
+Vemos el tipo de datos que tenemos en train
+
+```{r}
+str(train)
+```
+
+Variables discretas: id, hypertension, heart_disease y stroke.
+
+Variables continuas: age, avg_glucose_level y bmi.
+
+Variables texto: gender, ever_married, work_type, Residence_type y smoking_status.
+
+Se observa que hay tres variables continuas que son age, avg_glucose_level y bmi que estan en tipo num lo cual es correcto.
+
+
+La columna id no será relevante para el modelo de machine learning, ya que el identificador único de una persona no tiene influencia en el diagnóstico médico. Por lo tanto, eliminaremos esta columna del conjunto de datos para evitar que afecte la construcción del modelo.
+
+```{r}
+train <- train[, -which(names(train) == "id")]
+```
+
+Las variables de texto (gender, ever_married, work_type, Residence_type y smoking_status) están actualmente en formato "character". Dado que estas variables son categóricas, las convertiremos a tipo factor para facilitar su procesamiento en el modelo.
+
+```{r}
+train$gender <- factor(train$gender)
+train$ever_married <- factor(train$ever_married)
+train$Residence_type <- factor(train$Residence_type)
+train$smoking_status <- factor(train$smoking_status)
+train$work_type <- factor(train$work_type)
+train$hypertension <- factor(train$hypertension)
+train$heart_disease <- factor(train$heart_disease)
+train$stroke <- factor(train$stroke)
+
+str(train)
+```
+
+Se puede observar que ya esta corregido lo que se comento anteriormente y que ya están en factor.
+
+
+`
+
+
+##Nuevos imports
+
+
+```{r}
+test$gender <- factor(test$gender)
+test$ever_married <- factor(test$ever_married)
+test$Residence_type <- factor(test$Residence_type)
+test$smoking_status <- factor(test$smoking_status)
+test$work_type <- factor(test$work_type)
+test$hypertension <- factor(test$hypertension)
+test$heart_disease <- factor(test$heart_disease)
+test$stroke <- factor(test$stroke)
+```
+
+
+```{r}
+library(MASS)
+library(rpart)
+library(rpart.plot)
+library(dplyr)
+library(caret)
+library(adabag)
+```
+
+## Árbol de decisiones
+
+Si intentamos hacer un árbol de decisión con nuestros datos actuales, independientemente de hacer grid search o no, solo obtenemos un único nodo.
+
+```{r}
+tree <- rpart(stroke ~ ., 
+                    data = train, 
+                    parms = list(split = "gini"),)
+
+rpart.plot(tree)
+```
+
+Si observamos como está distribuida nuestra variable target podemos ver como hay un desequilibrio de clases muy marcado.
+
+```{r}
+table(train$stroke)
+prop.table(table(train$stroke))
+```
+
+Hay un gran desequilibrio, solo un 5% de casos positivos de derrame cerebral frente a un 95% de casos negativos. El algoritmo de árbol de decisión puede no ser el más indicado para nuestro dataset. Pero podemos hacer un submuestreo que nos permita equilibrar las clases y así poder generar un árbol que revelé patrones predictivos.
+
+```{r}
+set.seed(123)
+
+# Coger todos los casos positivos
+train_equilibrado <- train[!is.na(train$bmi), ]
+
+stroke_si <- train_equilibrado[train_equilibrado$stroke=="1",]
+
+# Coger muestra aleatoria de casos negativos
+stroke_no <- train_equilibrado[train_equilibrado$stroke=="0",][sample(nrow(train_equilibrado[train_equilibrado$stroke == 0, ]), nrow(stroke_si)), ]
+
+# Combinar los datos balanceados
+train_equilibrado <- bind_rows(stroke_si, stroke_no)
+train_equilibrado$stroke <- factor(train_equilibrado$stroke, levels = c(0, 1), labels = c("No", "Yes"))
+
+
+# Verificar distribución
+table(train_equilibrado$stroke)
+```
+
+Hay que tener en cuenta que estamos descartando la gran mayoría de los casos, por lo que es muy probable estar eliminando patrones importante, además de que al hacer un 50-50 de los datos no estamos reflejando la realidad donde solo una minoría tiende a tener derrames y por tanto lo que predizcamos no representará la realidad.
+
+Pese a esto, creemos interesante aplicarlo en nuestro trabajo para añadir un algoritmo que nos permita explorar de forma más clara qué variables son realmente predictivas del riesgo de derrame cerebral, sin que el fuerte desbalanceo de las clases opaque las posibles relaciones.
+
+```{r}
+# Configuración del grid search
+tree_grid <- expand.grid(cp = seq(0, 0.1, by = 0.01))
+
+# Configuración de la validación cruzada
+ctrl <- trainControl(
+  method = "cv",         
+  number = 5,            
+  summaryFunction = twoClassSummary,  
+  classProbs = TRUE,     
+  sampling = "up")
+
+# Entrenamiento del modelo con grid search
+set.seed(123)  
+tree_model <- train(
+  stroke ~ .,
+  data = train_equilibrado,
+  method = "rpart",
+  tuneGrid = tree_grid,
+  trControl = ctrl,
+  metric = "ROC",
+  control = rpart.control(
+    maxdepth = 5,        
+    minsplit = 20,       
+    minbucket = 7        
+  )
+)
+
+# Resultados y visualización
+
+print(tree_model)
+plot(tree_model)
+```
+
+Con un cp de 0.00, obtenemos el mejor valor de ROC, lo que indica una muy buena capacidad del modelo para distinguir entre pacientes con y sin riesgo de derrame cerebral. Este árbol también muestra un buen equilibrio entre sensibilidad y especificidad, lo que significa que es igualmente capaz de identificar correctamente tanto los casos positivos como los negativos.
+
+El algoritmo ha seleccionado automáticamente cp = 0.00 como valor óptimo basándose en el criterio de maximizar el ROC. 
+
+```{r}
+best_tree <- tree_model$finalModel
+rpart.plot(best_tree, extra= 106)
+```
+
+Si analizamos el árbol de decisión vemos que la edad es el factor más determinante estableciéndose como primera división en el árbol con un punto de corte clave en 56 años.
+
+En pacientes menores de 56 años, el BMI es el segundo factor más importante, mostrando un umbral crítico en 39. Este resultado sugiere que la obesidad severa en población relativamente joven aumenta mucho el riesgo de derrame, pasando de una probabilidad del 11% a un 80% cuando se supera este valor.
+
+Para los mayores de 56 años, el árbol identifica otros factores de riesgo relevantes. Entre 56 y 62 años, el tabaquismo ("smoking_status") muestra un impacto notable, mientras que en mayores de 62 años, la presencia de enfermedades cardíacas se convierte en un predictor potente, elevando la probabilidad de derrame hasta el 92% cuando está presente.
+
+Como ya hemos comentado es importante tener en cuenta que estos resultados proceden de un conjunto de datos balanceado manualmente, lo que puede afectar a la estimación de las probabilidades de riesgo. 
+
+
+## Boosting
+### AdaBoost
+
+```{r}
+train <- train[!is.na(train$bmi), ]
+train$stroke <- factor(train$stroke, levels = c(0, 1), labels = c("No", "Yes"))
+
+ada_grid <- expand.grid(
+  mfinal = c(50, 100, 150),  
+  maxdepth = c(1, 3, 5),     
+  coeflearn = c("Breiman")
+)
+set.seed(123)
+modelo_prueba <- train(
+  stroke ~ age + bmi + hypertension,
+  data = train,
+  method = "AdaBoost.M1",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,  
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary
+  ),
+  tuneGrid = ada_grid,
+  metric = "ROC"
+)
+modelo_prueba
+```
+
+
+Los resultados muestran que aunque el modelo alcanza buena capacidad predictiva, con valores ROC altos llama la atención que la sensibilidad es perfecta para los casos simples, pero la especificidad es cero.
+
+A medida que los casos se hacen más complejos el área bajo la curva ROC disminuyen, mientras que la especificidad mejora ligeramente, aunque sigue siendo muy baja. 
+
+Estos valores tan extremos seguramente se deban al gran desequilibrio de los datos que hemos comentaado en los árboles de decisión. Vamos a probar a hacer el AdaBoost con datos equilibrados.
+
+```{r}
+train <- train[!is.na(train$bmi), ]
+train$stroke <- factor(train$stroke, levels = c(0, 1), labels = c("No", "Yes"))
+
+ada_grid <- expand.grid(
+  mfinal = c(50, 100, 150),  
+  maxdepth = c(1, 3, 5),     
+  coeflearn = c("Breiman")
+)
+set.seed(123)
+modelo_prueba <- train(
+  stroke ~ age + bmi + hypertension,
+  data = train_equilibrado,
+  method = "AdaBoost.M1",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,  
+    classProbs = TRUE,
+    summaryFunction = twoClassSummary
+  ),
+  tuneGrid = ada_grid,
+  metric = "ROC"
+)
+modelo_prueba
+```
+
+Claramente el equilibrio entre clases ha mejorado el comportamiento del modelo, la curva ROC prácticamente mantiene sus valores anteriores. Ahora la sensibilidad es de alrededor de 0.7, esto quiere decir que el modelo detecta correctamente alredor del 70% de los casos de infarto. Y la especifidad aumenta en gran medida identificando alrededor del 80% de los casos con no derrame.
+
+Como hemos comentado en el árbol de decisión, estos resultados no reflejan la realidad y deben interpretarse con cuidado, ya que estamos "engañando" al modelo para que crea que la clase que si que tienen infartos es mucho más común de lo que es en realidad, por lo tanto ni este modelo ni el anterior son realmente utiles en un contexto real.
+
+### AdaBoost manual
+
+
+
