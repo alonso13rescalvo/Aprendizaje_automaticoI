@@ -154,9 +154,8 @@ str(train)
 Se puede observar que ya esta corregido lo que se comento anteriormente y que ya están en factor.
 
 
-`
 
-
+# Parte 2
 ##Nuevos imports
 
 
